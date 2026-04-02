@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+ml_core/models/*.joblib
+
+# Node
+node_modules/
+build/
+.env
+
+# Docker
+.docker/
+
+# OS
+.DS_Store
