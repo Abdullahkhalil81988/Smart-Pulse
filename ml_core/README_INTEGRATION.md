@@ -17,8 +17,9 @@ run all training and artifact generation in one command:
 
 ```bash
 .venv/bin/python -m ml_core.pipeline.train_entrypoint \
-  --retail-csv /path/to/OnlineRetailII.csv \
-  --churn-csv /path/to/TelcoChurn.csv \
+  --retail-csv data/raw/retail/online_retail_II.csv \
+  --churn-csv data/raw/churn/WA_Fn-UseC_-Telco-Customer-Churn.csv \
+  --credit-csv data/raw/credit/creditcard.csv \
   --version 1
 ```
 
@@ -28,7 +29,7 @@ artifacts are saved in ml_core/models.
 
 - import path: ml_core.pipeline.predictor
 - callable: predict(df, model_type)
-- accepted model_type values: forecaster, classifier
+- accepted model_type values: forecaster, classifier, anomaly
 - model artifacts expected:
   - ml_core/models/forecaster_v1.joblib
   - ml_core/models/classifier_v1.joblib
@@ -37,6 +38,11 @@ artifacts are saved in ml_core/models.
   - ml_core/models/pca_v1.joblib (phase 2)
   - ml_core/models/anomaly_v1.joblib (phase 2)
   - ml_core/models/churn_scaler_v1.joblib
+
+training datasets currently expected:
+- retail: online_retail_II.csv
+- churn: WA_Fn-UseC_-Telco-Customer-Churn.csv
+- credit: creditcard.csv
 
 ## p3 contract
 
@@ -61,6 +67,7 @@ notes:
 - if model_type is omitted, predictor auto-detects based on dataframe columns.
 - predictor runs feature engineering internally, so caller sends raw dataframe.
 - classifier uses classifier_best.joblib when present, else latest classifier_v*.joblib.
+- anomaly uses latest anomaly_v*.joblib and expects credit-like numeric features.
 
 ## mlops contract
 

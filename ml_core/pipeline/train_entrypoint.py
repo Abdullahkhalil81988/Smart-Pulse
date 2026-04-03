@@ -5,6 +5,7 @@ from typing import Dict
 
 import joblib
 import numpy as np
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 from ml_core.config import MODEL_DIR
 from ml_core.pipeline.advanced_models import (
@@ -21,6 +22,7 @@ from ml_core.pipeline.classifier import (
     train_classifier,
 )
 from ml_core.pipeline.feature_engineer import (
+    engineer_credit,
     engineer_churn,
     engineer_retail,
     train_test_split_data,
@@ -29,10 +31,11 @@ from ml_core.pipeline.forecaster import evaluate_forecaster, save_forecaster, tr
 from ml_core.pipeline.ingestor import load_csv
 
 
-def train_all(retail_csv: str, churn_csv: str, version: int = 1) -> Dict[str, object]:
-    # ingest and clean both datasets before feature generation
+def train_all(retail_csv: str, churn_csv: str, credit_csv: str, version: int = 1) -> Dict[str, object]:
+    # ingest and clean all fixed datasets before feature generation
     retail_df = load_csv(retail_csv, "retail")
     churn_df = load_csv(churn_csv, "churn")
+    credit_df = load_csv(credit_csv, "credit")
 
     # build and split retail features for forecaster training
     X_retail, y_retail = engineer_retail(retail_df)
@@ -68,11 +71,22 @@ def train_all(retail_csv: str, churn_csv: str, version: int = 1) -> Dict[str, ob
     pca, _, variance_ratio = fit_pca(X_churn, n_components=2)
     pca_path = save_pca(pca, version=version)
 
-    # derive simple anomaly labels from z-score to bootstrap phase-2 detector
-    z = np.abs((X_churn[:, 0] - np.mean(X_churn[:, 0])) / (np.std(X_churn[:, 0]) + 1e-9))
-    anomaly_labels = (z > 2.0).astype(int)
-    anomaly = train_anomaly_detector(X_churn, anomaly_labels)
+    # build and split credit features for real anomaly/fraud detector training
+    X_credit, y_credit = engineer_credit(credit_df)
+    Xf_train, Xf_test, yf_train, yf_test = train_test_split_data(X_credit, y_credit)
+
+    # train anomaly detector on labeled fraud data instead of synthetic labels
+    anomaly = train_anomaly_detector(Xf_train, yf_train)
     anomaly_path = save_anomaly_detector(anomaly, version=version)
+
+    # report fraud metrics that are robust to severe class imbalance
+    fraud_preds = anomaly.predict(Xf_test)
+    anomaly_metrics = {
+        "accuracy": float(accuracy_score(yf_test, fraud_preds)),
+        "precision": float(precision_score(yf_test, fraud_preds, zero_division=0)),
+        "recall": float(recall_score(yf_test, fraud_preds, zero_division=0)),
+        "f1": float(f1_score(yf_test, fraud_preds, zero_division=0)),
+    }
 
     return {
         "forecaster_path": str(forecaster_path),
@@ -85,20 +99,35 @@ def train_all(retail_csv: str, churn_csv: str, version: int = 1) -> Dict[str, ob
         "forecaster_metrics": forecaster_metrics,
         "best_classifier": {"name": best_name, "f1_cv": best_score},
         "pca_explained_variance_ratio": [float(v) for v in variance_ratio],
+        "anomaly_metrics": anomaly_metrics,
     }
 
 
 def main() -> None:
     # keep interface tiny so p2 can run training from one command
     parser = argparse.ArgumentParser(description="train all SmartPulse ml_core models")
-    parser.add_argument("--retail-csv", required=True, help="path to online retail csv")
-    parser.add_argument("--churn-csv", required=True, help="path to telco churn csv")
+    parser.add_argument(
+        "--retail-csv",
+        default="data/raw/retail/online_retail_II.csv",
+        help="path to online retail csv",
+    )
+    parser.add_argument(
+        "--churn-csv",
+        default="data/raw/churn/WA_Fn-UseC_-Telco-Customer-Churn.csv",
+        help="path to telco churn csv",
+    )
+    parser.add_argument(
+        "--credit-csv",
+        default="data/raw/credit/creditcard.csv",
+        help="path to credit fraud csv",
+    )
     parser.add_argument("--version", type=int, default=1, help="artifact version number")
     args = parser.parse_args()
 
     summary = train_all(
         retail_csv=args.retail_csv,
         churn_csv=args.churn_csv,
+        credit_csv=args.credit_csv,
         version=args.version,
     )
     print(json.dumps(summary, indent=2))

@@ -34,13 +34,17 @@ def _infer_model_type(df: pd.DataFrame) -> str:
     retail_cols = {"InvoiceDate", "Quantity", "UnitPrice"}
     # detect churn schema by checking core churn prediction columns
     churn_cols = {"tenure", "MonthlyCharges", "TotalCharges", "Churn"}
+    # detect credit schema by checking canonical fraud features
+    credit_cols = {"Time", "Amount", "V1", "V2"}
 
     if retail_cols.issubset(df.columns):
         return "forecaster"
     if churn_cols.issubset(df.columns):
         return "classifier"
+    if credit_cols.issubset(df.columns):
+        return "anomaly"
     raise ValueError(
-        "could not infer model_type from dataframe columns; expected retail or churn schema"
+        "could not infer model_type from dataframe columns; expected retail, churn, or credit schema"
     )
 
 
@@ -121,8 +125,30 @@ def predict(df: pd.DataFrame, model_type: Optional[str] = None) -> dict:
             anomaly_model = joblib.load(anomaly_path)
             anomaly_pred = anomaly_model.predict(X[-1:].astype(float))[0]
             anomaly_flag = bool(int(anomaly_pred) == 1)
+    elif model_type == "anomaly":
+        # load anomaly model trained from fixed credit fraud dataset
+        model_path = _latest_model_path("anomaly")
+        model = joblib.load(model_path)
+
+        # keep only numeric features and drop target if user included Class in payload
+        credit_features = df.copy()
+        if "Class" in credit_features.columns:
+            credit_features = credit_features.drop(columns=["Class"])
+        credit_features = credit_features.select_dtypes(include=[np.number])
+        if credit_features.empty:
+            raise ValueError("credit dataframe did not provide numeric features for anomaly scoring")
+
+        # use fraud probability as prediction and confidence for anomaly flow
+        proba = model.predict_proba(credit_features.to_numpy(dtype=float))
+        pred_value = float(np.mean(proba[:, 1]))
+        confidence = float(np.max(np.mean(proba, axis=0)))
+        model_name = model_path.stem
+
+        # fraud alert is based on latest row classification
+        anomaly_pred = model.predict(credit_features.tail(1).to_numpy(dtype=float))[0]
+        anomaly_flag = bool(int(anomaly_pred) == 1)
     else:
-        raise ValueError("model_type must be 'forecaster' or 'classifier'")
+        raise ValueError("model_type must be 'forecaster', 'classifier', or 'anomaly'")
 
     # emit utc timestamp in iso 8601 so api and dashboard can sort consistently
     timestamp = datetime.now(timezone.utc).isoformat()

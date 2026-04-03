@@ -93,6 +93,26 @@ def engineer_churn(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, StandardSc
     return X, y.to_numpy(dtype=int), scaler
 
 
+def engineer_credit(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
+    # copy input so feature extraction never mutates caller-owned data
+    work_df = df.copy()
+
+    # require target column because this path is strictly for supervised fraud training
+    if "Class" not in work_df.columns:
+        raise ValueError("missing required credit target column: Class")
+
+    # keep all numeric predictors except target to match kaggle credit dataset schema
+    feature_cols = [col for col in work_df.columns if col != "Class"]
+    features_df = work_df[feature_cols].select_dtypes(include=[np.number]).copy()
+    if features_df.empty:
+        raise ValueError("credit dataset did not produce numeric feature columns")
+
+    # return dense arrays for model training and evaluation
+    X = features_df.to_numpy(dtype=float)
+    y = work_df["Class"].to_numpy(dtype=int)
+    return X, y
+
+
 def train_test_split_data(
     X: np.ndarray, y: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
