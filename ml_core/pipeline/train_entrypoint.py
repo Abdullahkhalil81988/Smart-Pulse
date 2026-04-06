@@ -31,11 +31,15 @@ from ml_core.pipeline.forecaster import evaluate_forecaster, save_forecaster, tr
 from ml_core.pipeline.ingestor import load_csv
 
 
-def train_all(retail_csv: str, churn_csv: str, credit_csv: str, version: int = 1) -> Dict[str, object]:
+def train_all(retail_csv: str, churn_csv: str, credit_csv: str = None, version: int = 1) -> Dict[str, object]:
     # ingest and clean all fixed datasets before feature generation
     retail_df = load_csv(retail_csv, "retail")
     churn_df = load_csv(churn_csv, "churn")
-    credit_df = load_csv(credit_csv, "credit")
+    
+    # credit dataset is optional
+    credit_df = None
+    if credit_csv and Path(credit_csv).exists():
+        credit_df = load_csv(credit_csv, "credit")
 
     # build and split retail features for forecaster training
     X_retail, y_retail = engineer_retail(retail_df)
@@ -71,22 +75,23 @@ def train_all(retail_csv: str, churn_csv: str, credit_csv: str, version: int = 1
     pca, _, variance_ratio = fit_pca(X_churn, n_components=2)
     pca_path = save_pca(pca, version=version)
 
-    # build and split credit features for real anomaly/fraud detector training
-    X_credit, y_credit = engineer_credit(credit_df)
-    Xf_train, Xf_test, yf_train, yf_test = train_test_split_data(X_credit, y_credit)
+    # train anomaly detector if credit data available
+    anomaly_path = None
+    anomaly_metrics = {}
+    if credit_df is not None:
+        X_credit, y_credit = engineer_credit(credit_df)
+        Xf_train, Xf_test, yf_train, yf_test = train_test_split_data(X_credit, y_credit)
 
-    # train anomaly detector on labeled fraud data instead of synthetic labels
-    anomaly = train_anomaly_detector(Xf_train, yf_train)
-    anomaly_path = save_anomaly_detector(anomaly, version=version)
+        anomaly = train_anomaly_detector(Xf_train, yf_train)
+        anomaly_path = save_anomaly_detector(anomaly, version=version)
 
-    # report fraud metrics that are robust to severe class imbalance
-    fraud_preds = anomaly.predict(Xf_test)
-    anomaly_metrics = {
-        "accuracy": float(accuracy_score(yf_test, fraud_preds)),
-        "precision": float(precision_score(yf_test, fraud_preds, zero_division=0)),
-        "recall": float(recall_score(yf_test, fraud_preds, zero_division=0)),
-        "f1": float(f1_score(yf_test, fraud_preds, zero_division=0)),
-    }
+        fraud_preds = anomaly.predict(Xf_test)
+        anomaly_metrics = {
+            "accuracy": float(accuracy_score(yf_test, fraud_preds)),
+            "precision": float(precision_score(yf_test, fraud_preds, zero_division=0)),
+            "recall": float(recall_score(yf_test, fraud_preds, zero_division=0)),
+            "f1": float(f1_score(yf_test, fraud_preds, zero_division=0)),
+        }
 
     return {
         "forecaster_path": str(forecaster_path),
@@ -118,8 +123,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--credit-csv",
-        default="data/raw/credit/creditcard.csv",
-        help="path to credit fraud csv",
+        default=None,
+        help="path to credit fraud csv (optional)",
     )
     parser.add_argument("--version", type=int, default=1, help="artifact version number")
     args = parser.parse_args()

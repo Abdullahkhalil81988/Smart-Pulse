@@ -2,4 +2,4 @@ __pycache__/
 *.py[cod]
 .venv/
 *.csv
-.pytest_cache/
+.pytest_cache/datasets/*.csv
