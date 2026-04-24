@@ -12,6 +12,12 @@ def engineer_retail(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
     # copy input so feature work never mutates the caller's dataframe
     work_df = df.copy()
 
+    # normalise kaggle v2 column names so the rest of the pipeline uses one schema
+    if "Price" in work_df.columns and "UnitPrice" not in work_df.columns:
+        work_df = work_df.rename(columns={"Price": "UnitPrice"})
+    if "Customer ID" in work_df.columns and "CustomerID" not in work_df.columns:
+        work_df = work_df.rename(columns={"Customer ID": "CustomerID"})
+
     # parse invoice dates to datetime so monthly grouping is reliable
     work_df["InvoiceDate"] = pd.to_datetime(work_df["InvoiceDate"], errors="coerce")
     # drop rows where dates failed parsing because they cannot be placed on a timeline
@@ -35,12 +41,14 @@ def engineer_retail(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
     monthly["revenue_lag_1"] = monthly["monthly_revenue"].shift(1)
     monthly["revenue_lag_2"] = monthly["monthly_revenue"].shift(2)
     monthly["revenue_lag_3"] = monthly["monthly_revenue"].shift(3)
+    # rolling statistics capture trend and volatility over the last 3 months
+    monthly["rolling_mean_3"] = monthly["monthly_revenue"].shift(1).rolling(3).mean()
+    monthly["rolling_std_3"] = monthly["monthly_revenue"].shift(1).rolling(3).std().fillna(0)
 
-    # drop first rows with incomplete lag history because they are not trainable
+    feature_cols = ["revenue_lag_1", "revenue_lag_2", "revenue_lag_3", "rolling_mean_3", "rolling_std_3"]
     monthly = monthly.dropna(subset=["revenue_lag_1", "revenue_lag_2", "revenue_lag_3"])
 
-    # return lag matrix and target vector in aligned index order
-    X = monthly[["revenue_lag_1", "revenue_lag_2", "revenue_lag_3"]].reset_index(drop=True)
+    X = monthly[feature_cols].reset_index(drop=True)
     y = monthly["monthly_revenue"].reset_index(drop=True)
     return X, y
 
@@ -54,6 +62,10 @@ def engineer_churn(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, StandardSc
     missing_base = [col for col in base_numeric if col not in work_df.columns]
     if missing_base:
         raise ValueError(f"missing required churn feature columns: {missing_base}")
+
+    # TotalCharges is a string with spaces for new customers in the Telco dataset
+    work_df["TotalCharges"] = pd.to_numeric(work_df["TotalCharges"], errors="coerce")
+    work_df["TotalCharges"] = work_df["TotalCharges"].fillna(0.0)
 
     # collect optional categorical predictors if they exist in the incoming payload
     excluded = {"Churn", "CustomerID", "customerID"}

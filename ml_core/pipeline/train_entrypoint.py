@@ -27,7 +27,7 @@ from ml_core.pipeline.feature_engineer import (
     engineer_retail,
     train_test_split_data,
 )
-from ml_core.pipeline.forecaster import evaluate_forecaster, save_forecaster, train_forecaster
+from ml_core.pipeline.forecaster import choose_and_save_best_forecaster, evaluate_forecaster, save_forecaster, train_forecaster
 from ml_core.pipeline.ingestor import load_csv
 
 
@@ -41,14 +41,17 @@ def train_all(retail_csv: str, churn_csv: str, credit_csv: str = None, version: 
     if credit_csv and Path(credit_csv).exists():
         credit_df = load_csv(credit_csv, "credit")
 
-    # build and split retail features for forecaster training
+    # build retail features and select best forecaster model
     X_retail, y_retail = engineer_retail(retail_df)
     Xr_train, Xr_test, yr_train, yr_test = train_test_split_data(X_retail, y_retail)
 
-    # train and persist phase-1 forecaster model
-    forecaster = train_forecaster(Xr_train, yr_train)
-    forecaster_path = save_forecaster(forecaster, version=version)
+    best_forecaster_name, best_forecaster_score, forecaster_path = choose_and_save_best_forecaster(
+        X_retail, y_retail, version=version
+    )
+    forecaster = joblib.load(forecaster_path)
     forecaster_metrics = evaluate_forecaster(forecaster, Xr_test, yr_test)
+    forecaster_metrics["best_model"] = best_forecaster_name
+    forecaster_metrics["cv_r2"] = best_forecaster_score
 
     # build and split churn features for classifier training
     X_churn, y_churn, scaler = engineer_churn(churn_df)
@@ -113,12 +116,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="train all SmartPulse ml_core models")
     parser.add_argument(
         "--retail-csv",
-        default="data/raw/retail/online_retail_II.csv",
+        default="datasets/online_retail_II.csv",
         help="path to online retail csv",
     )
     parser.add_argument(
         "--churn-csv",
-        default="data/raw/churn/WA_Fn-UseC_-Telco-Customer-Churn.csv",
+        default="datasets/WA_Fn-UseC_-Telco-Customer-Churn.csv",
         help="path to telco churn csv",
     )
     parser.add_argument(

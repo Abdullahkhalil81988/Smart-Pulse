@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.linear_model import LogisticRegression
 
 from ml_core.mlops.monitor import detect_drift, generate_report
 from ml_core.mlops.retrainer import retrain_if_needed, should_retrain
@@ -100,10 +100,10 @@ def test_ingestor_raises_on_missing_columns(tmp_path: Path) -> None:
 
 
 def test_feature_engineer_outputs_and_scaler() -> None:
-    # retail path should return aligned lag features and targets
+    # retail path should return aligned lag+rolling features and targets
     retail_df = _retail_df_for_features()
     X_retail, y_retail = engineer_retail(retail_df)
-    assert X_retail.shape[1] == 3
+    assert X_retail.shape[1] == 5  # lag1, lag2, lag3, rolling_mean3, rolling_std3
     assert len(X_retail) == len(y_retail)
 
     # churn path should return numeric arrays and fitted scaler
@@ -129,7 +129,7 @@ def test_forecaster_train_and_evaluate_keys() -> None:
     model = train_forecaster(X_train, y_train)
     metrics = evaluate_forecaster(model, X_test, y_test)
 
-    assert isinstance(model, LinearRegression)
+    assert hasattr(model, "predict")
     assert set(metrics.keys()) == {"mae", "rmse", "r2"}
 
 
@@ -152,12 +152,16 @@ def test_classifier_train_and_evaluate_keys() -> None:
     }
 
 
-def test_predict_returns_required_schema() -> None:
-    # save a high-version forecaster so predictor auto-load picks this test artifact
+def test_predict_returns_required_schema(tmp_path: Path, monkeypatch) -> None:
+    # redirect model dir to tmp so this test never pollutes the production models folder
+    monkeypatch.setattr("ml_core.config.MODEL_DIR", str(tmp_path))
+    monkeypatch.setattr("ml_core.pipeline.predictor.MODEL_DIR", str(tmp_path))
+    monkeypatch.setattr("ml_core.pipeline.forecaster.MODEL_DIR", str(tmp_path))
+
     retail_df = _retail_df_for_features()
     X, y = engineer_retail(retail_df)
     model = train_forecaster(X, y)
-    save_forecaster(model, version=999)
+    save_forecaster(model, version=1)
 
     output = predict(retail_df, model_type="forecaster")
 
@@ -173,23 +177,25 @@ def test_predict_returns_required_schema() -> None:
     }
 
 
-def test_predict_classifier_with_phase2_outputs() -> None:
-    # train and save best classifier artifact so predictor prefers it
+def test_predict_classifier_with_phase2_outputs(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("ml_core.config.MODEL_DIR", str(tmp_path))
+    monkeypatch.setattr("ml_core.pipeline.predictor.MODEL_DIR", str(tmp_path))
+    monkeypatch.setattr("ml_core.pipeline.classifier.MODEL_DIR", str(tmp_path))
+    monkeypatch.setattr("ml_core.pipeline.advanced_models.MODEL_DIR", str(tmp_path))
+
     churn_df = _churn_df_for_features()
     X, y, _ = engineer_churn(churn_df)
     best_name, best_score, best_path = choose_and_save_best_classifier(X, y)
-    assert best_name in {"logistic", "svm", "mlp"}
+    assert best_name in {"logistic", "svm", "mlp", "random_forest", "gradient_boosting"}
     assert isinstance(best_score, float)
     assert best_path.exists()
 
-    # save kmeans/pca/anomaly models so predictor can populate optional fields
     kmeans = train_kmeans(X)
     save_kmeans(kmeans, version=1)
 
     pca, _, _ = fit_pca(X)
     save_pca(pca, version=1)
 
-    # synthesize anomaly labels from z-score rule for deterministic test behavior
     anomaly_labels = (np.abs((X[:, 0] - np.mean(X[:, 0])) / (np.std(X[:, 0]) + 1e-9)) > 1.0).astype(int)
     anomaly = train_anomaly_detector(X, anomaly_labels)
     save_anomaly_detector(anomaly, version=1)
@@ -217,13 +223,15 @@ def test_selector_classification_includes_phase2_candidates() -> None:
     X, y, _ = engineer_churn(churn_df)
     result = select_model(X, y, task="classification")
 
-    assert result["best_model_name"] in {"LogisticRegression", "SVC", "MLPClassifier"}
+    assert result["best_model_name"] in {"LogisticRegression", "SVC", "MLPClassifier", "RandomForest", "GradientBoosting"}
     assert isinstance(result["best_score"], float)
-    assert len(result["all_scores"]) == 3
+    assert len(result["all_scores"]) == 5
 
 
-def test_serializer_save_load_and_rollback(tmp_path: Path) -> None:
-    # save model with metadata and ensure active pointer tracks selected version
+def test_serializer_save_load_and_rollback(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("ml_core.config.MODEL_DIR", str(tmp_path))
+    monkeypatch.setattr("ml_core.mlops.serializer.MODEL_DIR", str(tmp_path))
+
     retail_df = _retail_df_for_features()
     X, y = engineer_retail(retail_df)
     model = train_forecaster(X, y)
@@ -259,14 +267,15 @@ def test_monitor_report_and_drift_detection() -> None:
     assert isinstance(drift["min_p_value"], float)
 
 
-def test_retrainer_flow() -> None:
-    # no drift should keep version unchanged and skip retraining
+def test_retrainer_flow(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("ml_core.config.MODEL_DIR", str(tmp_path))
+    monkeypatch.setattr("ml_core.mlops.serializer.MODEL_DIR", str(tmp_path))
+
     no_drift = {"drifted": False}
     assert should_retrain(no_drift) is False
     result = retrain_if_needed(no_drift, np.array([[1.0], [2.0]]), np.array([1.0, 2.0]), "forecaster", 2)
     assert result == {"retrained": False, "new_version": 2}
 
-    # drifted=true should trigger retraining and increment version
     yes_drift = {"drifted": True}
     X = np.array([[1.0], [2.0], [3.0], [4.0], [5.0]])
     y = np.array([2.0, 4.0, 6.0, 8.0, 10.0])
