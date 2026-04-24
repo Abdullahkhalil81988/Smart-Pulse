@@ -3,6 +3,7 @@ from typing import Dict, Tuple
 
 import joblib
 import numpy as np
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
@@ -11,7 +12,7 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
 )
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
 
@@ -19,30 +20,25 @@ from ml_core.config import MODEL_DIR, RANDOM_SEED
 
 
 def train_classifier(X_train: np.ndarray, y_train: np.ndarray) -> LogisticRegression:
-    # max_iter=1000 avoids common non-convergence issues on churn-style tabular data
-    model = LogisticRegression(max_iter=1000, random_state=RANDOM_SEED)
-    # train on standardized feature vectors to estimate churn probability boundaries
+    # class_weight balances minority churn class without oversampling
+    model = LogisticRegression(max_iter=1000, random_state=RANDOM_SEED, class_weight="balanced")
     model.fit(X_train, y_train)
     return model
 
 
 def train_svm_classifier(X_train: np.ndarray, y_train: np.ndarray) -> SVC:
-    # probability=true is required because api responses need churn probabilities
-    model = SVC(probability=True, random_state=RANDOM_SEED)
-    # fit on churn features to learn non-linear class boundaries
+    model = SVC(probability=True, random_state=RANDOM_SEED, class_weight="balanced")
     model.fit(X_train, y_train)
     return model
 
 
 def train_mlp_classifier(X_train: np.ndarray, y_train: np.ndarray) -> MLPClassifier:
-    # two hidden layers provide stronger capacity for complex churn patterns
     model = MLPClassifier(
-        hidden_layer_sizes=(100, 100),
+        hidden_layer_sizes=(128, 64),
         activation="relu",
         max_iter=500,
         random_state=RANDOM_SEED,
     )
-    # train neural network on standardized churn features
     model.fit(X_train, y_train)
     return model
 
@@ -92,34 +88,45 @@ def load_classifier(version: int = 1) -> LogisticRegression:
 
 
 def choose_and_save_best_classifier(X: np.ndarray, y: np.ndarray) -> Tuple[str, float, Path]:
-    # compare candidate classifiers with rotating folds for fair model selection
     candidates = {
-        "logistic": LogisticRegression(max_iter=1000, random_state=RANDOM_SEED),
-        "svm": SVC(probability=True, random_state=RANDOM_SEED),
+        "logistic": LogisticRegression(
+            max_iter=1000, random_state=RANDOM_SEED, class_weight="balanced"
+        ),
+        "random_forest": RandomForestClassifier(
+            n_estimators=300,
+            max_depth=None,
+            min_samples_leaf=2,
+            class_weight="balanced",
+            random_state=RANDOM_SEED,
+        ),
+        "gradient_boosting": GradientBoostingClassifier(
+            n_estimators=200,
+            learning_rate=0.05,
+            max_depth=4,
+            subsample=0.8,
+            random_state=RANDOM_SEED,
+        ),
         "mlp": MLPClassifier(
-            hidden_layer_sizes=(100, 100),
+            hidden_layer_sizes=(128, 64),
             activation="relu",
             max_iter=500,
             random_state=RANDOM_SEED,
         ),
     }
 
-    # store mean f1 score per model so we can pick the strongest candidate
+    # StratifiedKFold preserves churn class ratio in every fold
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
     scores: Dict[str, float] = {}
     for name, model in candidates.items():
-        # cross_val_score rotates train/test folds to reduce split bias
-        cv_scores = cross_val_score(model, X, y, cv=5, scoring="f1")
+        cv_scores = cross_val_score(model, X, y, cv=cv, scoring="f1")
         scores[name] = float(np.mean(cv_scores))
 
-    # select the best model by highest mean f1 across folds
     best_model_name = max(scores, key=scores.get)
     best_score = scores[best_model_name]
 
-    # refit winner on full data before persisting for inference use
     best_model = candidates[best_model_name]
     best_model.fit(X, y)
 
-    # save winner using fixed contract filename for phase-2 integration
     model_dir = Path(MODEL_DIR)
     model_dir.mkdir(parents=True, exist_ok=True)
     best_path = model_dir / "classifier_best.joblib"

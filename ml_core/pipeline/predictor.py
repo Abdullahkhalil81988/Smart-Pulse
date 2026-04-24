@@ -30,14 +30,15 @@ def _latest_model_path(prefix: str) -> Path:
 
 
 def _infer_model_type(df: pd.DataFrame) -> str:
-    # detect retail schema by checking core retail revenue columns
-    retail_cols = {"InvoiceDate", "Quantity", "UnitPrice"}
+    # detect retail schema — accept both kaggle column naming conventions
+    retail_cols_v1 = {"InvoiceDate", "Quantity", "UnitPrice"}
+    retail_cols_v2 = {"InvoiceDate", "Quantity", "Price"}
     # detect churn schema by checking core churn prediction columns
     churn_cols = {"tenure", "MonthlyCharges", "TotalCharges", "Churn"}
     # detect credit schema by checking canonical fraud features
     credit_cols = {"Time", "Amount", "V1", "V2"}
 
-    if retail_cols.issubset(df.columns):
+    if retail_cols_v1.issubset(df.columns) or retail_cols_v2.issubset(df.columns):
         return "forecaster"
     if churn_cols.issubset(df.columns):
         return "classifier"
@@ -94,15 +95,15 @@ def predict(df: pd.DataFrame, model_type: Optional[str] = None) -> dict:
 
         # rebuild churn features from raw churn rows before scoring
         X, _, _ = engineer_churn(df)
-        if X.size == 0:
+        if len(X) == 0:
             raise ValueError("churn dataframe produced no features for prediction")
 
         # use positive-class probability as churn risk output in [0, 1]
         proba = model.predict_proba(X)
         pred_value = float(np.mean(proba[:, 1]))
 
-        # contract asks for max class probability as confidence
-        confidence = float(np.max(np.mean(proba, axis=0)))
+        # mean of per-sample max probability = average confidence across all rows
+        confidence = float(np.mean(np.max(proba, axis=1)))
         model_name = model_path.stem
 
         # if kmeans exists, attach cluster for the latest row to enrich dashboard views
@@ -119,12 +120,13 @@ def predict(df: pd.DataFrame, model_type: Optional[str] = None) -> dict:
             pca_x = float(pca_coords[0])
             pca_y = float(pca_coords[1])
 
-        # if anomaly detector exists, set alert flag for latest input sample
+        # anomaly detector is trained on credit features (30 dims) — skip for churn data
         anomaly_path = Path(MODEL_DIR) / "anomaly_v1.joblib"
         if anomaly_path.exists():
             anomaly_model = joblib.load(anomaly_path)
-            anomaly_pred = anomaly_model.predict(X[-1:].astype(float))[0]
-            anomaly_flag = bool(int(anomaly_pred) == 1)
+            if anomaly_model.n_features_in_ == X.shape[1]:
+                anomaly_pred = anomaly_model.predict(X[-1:].astype(float))[0]
+                anomaly_flag = bool(int(anomaly_pred) == 1)
     elif model_type == "anomaly":
         # load anomaly model trained from fixed credit fraud dataset
         model_path = _latest_model_path("anomaly")
@@ -141,7 +143,7 @@ def predict(df: pd.DataFrame, model_type: Optional[str] = None) -> dict:
         # use fraud probability as prediction and confidence for anomaly flow
         proba = model.predict_proba(credit_features.to_numpy(dtype=float))
         pred_value = float(np.mean(proba[:, 1]))
-        confidence = float(np.max(np.mean(proba, axis=0)))
+        confidence = float(np.mean(np.max(proba, axis=1)))
         model_name = model_path.stem
 
         # fraud alert is based on latest row classification

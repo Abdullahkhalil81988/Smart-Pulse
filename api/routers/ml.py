@@ -7,14 +7,53 @@ import sys
 import os
 import io
 import json
+from ml_core.config import MODEL_DIR
 
 router = APIRouter(prefix="/api/v1", tags=["ML"])
 
 _last_train_meta = {}
 
-RETAIL_CSV = "datasets/retail_test.csv"
-CHURN_CSV  = "datasets/churn_test.csv"
-CREDIT_CSV = "datasets/creditcard.csv"
+RETAIL_CSV = os.environ.get("RETAIL_CSV", "datasets/online_retail_II.csv")
+CHURN_CSV  = os.environ.get("CHURN_CSV",  "datasets/WA_Fn-UseC_-Telco-Customer-Churn.csv")
+CREDIT_CSV = os.environ.get("CREDIT_CSV", "datasets/creditcard.csv")
+UPLOADS_DIR = os.environ.get("UPLOADS_DIR", "uploads")
+
+@router.post("/ingest")
+async def ingest(file: UploadFile = File(...)):
+    """Accept a CSV upload, validate it, and store it in uploads/ for training."""
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files accepted")
+
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    try:
+        df = pd.read_csv(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not parse CSV: {str(e)}")
+
+    if df.empty:
+        raise HTTPException(status_code=400, detail="CSV has no rows")
+
+    # strip path components to prevent directory traversal attacks
+    safe_filename = os.path.basename(file.filename)
+    if not safe_filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    dest = os.path.join(UPLOADS_DIR, safe_filename)
+    with open(dest, "wb") as f:
+        f.write(contents)
+
+    return {
+        "status": "ingested",
+        "filename": safe_filename,
+        "rows": len(df),
+        "columns": list(df.columns),
+        "saved_to": dest,
+    }
+
 
 @router.get("/datasets/status")
 def dataset_status():
@@ -45,7 +84,7 @@ def train(model_type: str = "both", version: int = 1):
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise HTTPException(status_code=500,
-            detail=f"Training failed: {result.stderr}")
+            detail=f"Training failed:\nSTDERR: {result.stderr}\nSTDOUT: {result.stdout}")
 
     global _last_train_meta
     _last_train_meta = {
@@ -78,7 +117,7 @@ async def predict(
     if df.empty:
         raise HTTPException(status_code=400, detail="CSV is empty")
 
-    models_dir = "ml_core/models"
+    models_dir = MODEL_DIR
     if not os.path.exists(models_dir) or not any(
         f.endswith(".joblib") for f in os.listdir(models_dir)
     ):
@@ -96,7 +135,7 @@ async def predict(
 
 @router.get("/report")
 def report():
-    models_dir = "ml_core/models"
+    models_dir = MODEL_DIR
     artifacts = []
     metadata = {}
 
@@ -111,9 +150,22 @@ def report():
                 except Exception:
                     pass
 
+    # categorise each artifact clearly
+    model_summary = {
+        "forecaster":   [f for f in artifacts if "forecaster" in f],
+        "classifier":   [f for f in artifacts if "classifier" in f],
+        "clustering":   [f for f in artifacts if "kmeans" in f],
+        "pca":          [f for f in artifacts if "pca" in f],
+        "scaler":       [f for f in artifacts if "scaler" in f],
+        "anomaly":      [f for f in artifacts if "anomaly" in f],
+    }
+
     return {
         "last_training":   _last_train_meta if _last_train_meta else "No training run yet",
+        "model_summary":   model_summary,
         "model_artifacts": artifacts,
         "artifact_count":  len(artifacts),
+        "anomaly_model_available": any("anomaly" in f for f in artifacts),
+        "credit_csv_provided": os.path.exists(CREDIT_CSV),
         "model_metadata":  metadata,
     }
