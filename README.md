@@ -1,3 +1,12 @@
+---
+title: SmartPulse
+emoji: 🚀
+colorFrom: purple
+colorTo: blue
+sdk: docker
+pinned: false
+---
+
 # SmartPulse
 
 AI-powered business analytics platform. Upload your data, get predictions, detect anomalies, and monitor model health in real time.
