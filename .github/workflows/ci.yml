@@ -24,9 +24,13 @@ jobs:
           pip install -r api/requirements.txt -r ml_core/requirements.txt
 
       - name: Run ml_core tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: pytest ml_core/tests/ -v
 
       - name: Run api tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: pytest api/tests/ -v
 
   test-node:
