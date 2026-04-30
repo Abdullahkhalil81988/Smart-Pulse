@@ -21,12 +21,7 @@ def log_feedback(
         db = client.get_default_database() or client["SmartPulse"]
         result = db[collection].update_one(
             {"_id": oid},
-            {
-                "$set": {
-                    "correct": correct,
-                    "feedback_at": datetime.now(timezone.utc).isoformat(),
-                }
-            },
+            {"$set": {"correct": correct, "feedback_at": datetime.now(timezone.utc).isoformat()}},
         )
         return result.modified_count == 1
     finally:
