@@ -1,5 +1,12 @@
 __pycache__/
 *.py[cod]
 .venv/
+temp_env/
 *.csv
-.pytest_cache/datasets/*.csv
+.pytest_cache/
+.DS_Store
+
+# Node
+node_modules/
+.env
+*.env
