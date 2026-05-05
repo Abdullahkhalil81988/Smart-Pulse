@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('./firebase-config'); // initialise Firebase Admin SDK early
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
