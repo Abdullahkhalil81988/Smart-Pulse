@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router";
+import { useAuth } from "../lib/AuthContext";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -39,6 +40,12 @@ export function Layout() {
   const location = useLocation();
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user, logout } = useAuth();
+
+  const initials = user?.name
+    ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    : "?";
+  const displayName = user?.name || "User";
 
   const allItems = [...navItems, ...backOfficeItems];
   const currentItem = allItems.find((i) => location.pathname.startsWith(i.to));
@@ -112,13 +119,13 @@ export function Layout() {
       <div className="px-3 py-3 border-t border-gray-700">
         <div className="flex items-center gap-2 p-2 rounded-md hover:bg-gray-800 cursor-pointer group">
           <div className="w-7 h-7 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0">
-            <span className="text-white" style={{ fontSize: 11 }}>JD</span>
+            <span className="text-white" style={{ fontSize: 11 }}>{initials}</span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-gray-300 text-xs truncate" style={{ fontWeight: 500 }}>Jane Doe</p>
+            <p className="text-gray-300 text-xs truncate" style={{ fontWeight: 500 }}>{displayName}</p>
             <p className="text-gray-500" style={{ fontSize: 10 }}>Admin</p>
           </div>
-          <LogOut size={13} className="text-gray-600 group-hover:text-gray-400" onClick={() => navigate("/login")} />
+          <LogOut size={13} className="text-gray-600 group-hover:text-gray-400" onClick={async () => { await logout(); navigate("/login"); }} />
         </div>
       </div>
     </>
@@ -181,7 +188,7 @@ export function Layout() {
               <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full" />
             </button>
             <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center">
-              <span className="text-gray-600" style={{ fontSize: 11, fontWeight: 600 }}>JD</span>
+              <span className="text-gray-600" style={{ fontSize: 11, fontWeight: 600 }}>{initials}</span>
             </div>
           </div>
         </header>
