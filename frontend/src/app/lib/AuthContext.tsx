@@ -64,6 +64,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
+        // Skip auto-sync when the RegisterPage is handling it manually.
+        // This prevents a race condition where onAuthStateChanged fires
+        // before updateProfile has finished, sending stale data to /sync.
+        if ((auth as any)._skipAutoSync) {
+          setLoading(false);
+          return;
+        }
         await syncUser(fbUser);
       } else {
         setUser(null);

@@ -24,20 +24,31 @@ export function RegisterPage() {
     setError(null);
     setLoading(true);
     try {
+      // Flag to prevent AuthContext's onAuthStateChanged from auto-syncing
+      // before we've finished setting up the profile.
+      (auth as any)._skipAutoSync = true;
+
       // 1. Create the Firebase user
       const fullName = `${firstName} ${lastName}`.trim();
       const cred = await createUserWithEmailAndPassword(auth, email, password);
 
-      // 2. Set display name in Firebase
+      // 2. Attach display name to the Firebase user
       await updateProfile(cred.user, { displayName: fullName });
 
-      // 3. Sync with backend — create MongoDB user + business
+      // 3. Force token refresh so the backend receives the updated name
+      await cred.user.getIdToken(true);
+
+      // 4. Sync with backend — create MongoDB user + business
       await api.post("/api/auth/sync", {
         businessName: businessName || undefined,
       });
 
+      // 5. Allow future auto-syncs again
+      (auth as any)._skipAutoSync = false;
+
       navigate("/dashboard");
     } catch (err: unknown) {
+      (auth as any)._skipAutoSync = false;
       const msg = err instanceof Error ? err.message : "Registration failed";
       setError(msg.replace("Firebase: ", ""));
     } finally {
