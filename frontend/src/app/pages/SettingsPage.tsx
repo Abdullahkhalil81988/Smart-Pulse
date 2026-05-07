@@ -1,6 +1,13 @@
-import { useState } from "react";
-import { Settings, Users, Sliders, Building2, Zap, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Settings, Users, Sliders, Building2, Zap, Plus, Trash2, Loader2 } from "lucide-react";
 import { WireframeBox } from "../components/WireframeBox";
+import api from "../lib/api";
+
+interface BusinessProfile {
+  _id: string;
+  name: string;
+  industry: string;
+}
 
 const staffMembers = [
   { name: "Jane Doe", email: "jane@business.com", role: "Admin", status: "Active" },
@@ -15,11 +22,38 @@ export function SettingsPage() {
   const [reviewThreshold, setReviewThreshold] = useState(40);
   const [churnThreshold, setChurnThreshold] = useState(75);
 
+  const [business, setBusiness] = useState<BusinessProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchBusiness() {
+      try {
+        const res = await api.get<BusinessProfile[]>("/api/businesses");
+        if (res.length > 0) {
+          setBusiness(res[0]);
+        }
+      } catch (err) {
+        console.error("Failed to fetch business profile:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchBusiness();
+  }, []);
+
   const tabs = [
     { key: "business", label: "Business profile", icon: Building2 },
     { key: "model", label: "Model config", icon: Sliders },
     { key: "staff", label: "Staff & users", icon: Users },
   ] as const;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <Loader2 size={28} className="animate-spin text-violet-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-4xl w-full">
@@ -68,10 +102,9 @@ export function SettingsPage() {
                   </div>
                   {/* Fields */}
                   {[
-                    { label: "Business name", value: "Acme Retail Ltd." },
-                    { label: "Legal entity", value: "Acme Retail Ltd. Inc." },
-                    { label: "Industry", value: "Retail — Food & Beverage" },
-                    { label: "Tax ID", value: "••-•••••••" },
+                    { label: "Business name", value: business?.name || "N/A" },
+                    { label: "Industry", value: business?.industry || "N/A" },
+                    { label: "Business ID", value: business?._id || "N/A" },
                   ].map((f) => (
                     <div key={f.label} className="flex flex-col md:grid md:grid-cols-3 gap-2 md:gap-4 md:items-center">
                       <label className="text-gray-600 text-xs" style={{ fontWeight: 500 }}>{f.label}</label>

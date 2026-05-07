@@ -68,9 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // This prevents a race condition where onAuthStateChanged fires
         // before updateProfile has finished, sending stale data to /sync.
         if ((auth as any)._skipAutoSync) {
-          setLoading(false);
+          // Keep loading=true because RegisterPage is manually syncing
+          // and will soon call refreshProfile()
           return;
         }
+        setLoading(true); // <-- ensure loading is true while we hit the backend
         await syncUser(fbUser);
       } else {
         setUser(null);

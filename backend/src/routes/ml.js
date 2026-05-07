@@ -43,6 +43,7 @@ router.post('/predict', auth, async (req, res) => {
     // create an alert if anomaly detected
     if (result.anomaly_flag) {
       const alert = await Alert.create({
+        userId:   req.user.id,
         type:     'anomaly',
         severity: 'high',
         message:  `Anomaly detected by ${result.model_name} (confidence: ${(result.confidence * 100).toFixed(1)}%)`,

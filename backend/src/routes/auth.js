@@ -10,7 +10,7 @@ const Business = require('../models/Business');
 // returns the MongoDB user document (and optionally links a business).
 router.post('/sync', auth, async (req, res) => {
   try {
-    const { businessName, industry } = req.body;
+    const { businessName, industry } = req.body || {};
     let user = await User.findById(req.user.id).populate('businessId');
 
     // If a business name was provided (registration flow) and the user

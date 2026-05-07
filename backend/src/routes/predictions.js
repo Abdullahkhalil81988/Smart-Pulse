@@ -3,11 +3,11 @@ const auth = require('../middleware/auth');
 const Prediction = require('../models/Prediction');
 const Alert = require('../models/Alert');
 
-// GET /api/predictions  — list with optional filters
+// GET /api/predictions  — list with optional filters, scoped to user
 router.get('/', auth, async (req, res) => {
   try {
     const { model_type, limit = 50, page = 1 } = req.query;
-    const filter = {};
+    const filter = { userId: req.user.id };
     if (model_type) filter.model_type = model_type;
 
     const predictions = await Prediction.find(filter)
@@ -22,17 +22,20 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// GET /api/predictions/stats  — dashboard summary cards
+// GET /api/predictions/stats  — dashboard summary cards, scoped to user
 router.get('/stats', auth, async (req, res) => {
   try {
-    const total      = await Prediction.countDocuments();
-    const anomalies  = await Prediction.countDocuments({ anomaly_flag: true });
-    const withFeedback = await Prediction.countDocuments({ correct: { $ne: null } });
-    const correct    = await Prediction.countDocuments({ correct: true });
+    const userFilter = { userId: req.user.id };
+
+    const total      = await Prediction.countDocuments(userFilter);
+    const anomalies  = await Prediction.countDocuments({ ...userFilter, anomaly_flag: true });
+    const withFeedback = await Prediction.countDocuments({ ...userFilter, correct: { $ne: null } });
+    const correct    = await Prediction.countDocuments({ ...userFilter, correct: true });
 
     const accuracy = withFeedback > 0 ? Math.round((correct / withFeedback) * 100) : null;
 
     const modelCounts = await Prediction.aggregate([
+      { $match: userFilter },
       { $group: { _id: '$model_type', count: { $sum: 1 } } },
     ]);
 
@@ -42,10 +45,10 @@ router.get('/stats', auth, async (req, res) => {
   }
 });
 
-// GET /api/predictions/:id
+// GET /api/predictions/:id — with ownership check
 router.get('/:id', auth, async (req, res) => {
   try {
-    const p = await Prediction.findById(req.params.id);
+    const p = await Prediction.findOne({ _id: req.params.id, userId: req.user.id });
     if (!p) return res.status(404).json({ error: 'Prediction not found' });
     res.json(p);
   } catch (err) {
@@ -53,15 +56,15 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// POST /api/predictions/feedback/:id  — thumbs up/down
+// POST /api/predictions/feedback/:id  — thumbs up/down, with ownership check
 router.post('/feedback/:id', auth, async (req, res) => {
   try {
     const { correct } = req.body;
     if (typeof correct !== 'boolean')
       return res.status(400).json({ error: 'correct must be a boolean' });
 
-    const p = await Prediction.findByIdAndUpdate(
-      req.params.id,
+    const p = await Prediction.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user.id },
       { correct, feedback_at: new Date() },
       { new: true }
     );

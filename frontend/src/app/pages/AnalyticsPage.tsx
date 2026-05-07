@@ -1,30 +1,64 @@
-import { useState } from "react";
-import { BarChart2, Activity, Zap, CheckCircle, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { BarChart2, Activity, Zap, CheckCircle, X, Loader2 } from "lucide-react";
 import { WireframeBox } from "../components/WireframeBox";
+import api from "../lib/api";
 
-const modelMetrics = [
-  { label: "Accuracy", value: "94.2%", sub: "↑ 1.1% this week", good: true },
-  { label: "Precision", value: "91.7%", sub: "Fraud true positive", good: true },
-  { label: "Recall", value: "88.4%", sub: "Catch rate", good: true },
-  { label: "F1 Score", value: "0.900", sub: "Harmonic mean", good: true },
-  { label: "False positive rate", value: "3.8%", sub: "↑ 0.2% this week", good: false },
-  { label: "Inferences today", value: "342", sub: "All transactions", good: true },
-];
+interface PredictionStats {
+  total: number;
+  anomalies: number;
+  accuracy: number | null;
+  active_models: number;
+}
 
-const predictionLog = [
-  { id: "TXN-4821", score: 87, verdict: "FRAUD", time: "14:32:18", confirmed: true, model: "Fraud Detector" },
-  { id: "TXN-4820", score: 12, verdict: "SAFE", time: "14:28:04", confirmed: true, model: "Fraud Detector" },
-  { id: "TXN-4819", score: 91, verdict: "FRAUD", time: "13:51:22", confirmed: false, model: "Fraud Detector" },
-  { id: "TXN-4818", score: 5, verdict: "SAFE", time: "13:44:10", confirmed: true, model: "Churn Predictor" },
-  { id: "TXN-4817", score: 34, verdict: "REVIEW", time: "12:30:58", confirmed: false, model: "Fraud Detector" },
-  { id: "TXN-4816", score: 72, verdict: "FRAUD", time: "11:18:43", confirmed: true, model: "Fraud Detector" },
-  { id: "TXN-4815", score: 8, verdict: "SAFE", time: "11:05:12", confirmed: true, model: "Churn Predictor" },
-];
+interface PredictionItem {
+  _id: string;
+  model_name: string;
+  model_type: string;
+  prediction: number;
+  confidence: number;
+  anomaly_flag: boolean;
+  createdAt: string;
+  raw_input?: any;
+}
+
+function formatTime(dateStr: string) {
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
 
 export function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState<"performance" | "log">("performance");
   const [showPanel, setShowPanel] = useState(false);
-  const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
+  const [selectedPrediction, setSelectedPrediction] = useState<PredictionItem | null>(null);
+  const [stats, setStats] = useState<PredictionStats | null>(null);
+  const [predictions, setPredictions] = useState<PredictionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [statsRes, predsRes] = await Promise.all([
+          api.get<PredictionStats>("/api/predictions/stats"),
+          api.get<{ predictions: PredictionItem[] }>("/api/predictions?limit=20"),
+        ]);
+        setStats(statsRes);
+        setPredictions(predsRes.predictions);
+      } catch (err) {
+        console.error("Failed to fetch analytics:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <Loader2 size={28} className="animate-spin text-violet-600" />
+      </div>
+    );
+  }
 
   const tabs = [
     { key: "performance", label: "Model performance" },
@@ -87,7 +121,7 @@ export function AnalyticsPage() {
                 <p className="text-gray-400 text-xs mt-0.5">Logistic Regression</p>
               </div>
 
-              <p className="text-violet-600 mb-4" style={{ fontSize: 32, fontWeight: 800 }}>94% Accuracy</p>
+              <p className="text-violet-600 mb-4" style={{ fontSize: 32, fontWeight: 800 }}>{stats?.accuracy ? Math.round(stats.accuracy) : 0}% Accuracy</p>
 
               <div className="space-y-3 mb-4">
                 <div>
@@ -321,8 +355,8 @@ export function AnalyticsPage() {
           {/* Summary */}
           <div className="grid grid-cols-4 gap-3">
             {[
-              { label: "Total inferences", value: "342", color: "border-l-violet-400" },
-              { label: "FRAUD verdicts", value: "7", color: "border-l-red-400" },
+              { label: "Total inferences", value: stats?.total || 0, color: "border-l-violet-400" },
+              { label: "FRAUD verdicts", value: stats?.anomalies || 0, color: "border-l-red-400" },
               { label: "REVIEW verdicts", value: "12", color: "border-l-amber-400" },
               { label: "SAFE verdicts", value: "323", color: "border-l-emerald-400" },
             ].map((s) => (
@@ -359,34 +393,38 @@ export function AnalyticsPage() {
                 </tr>
               </thead>
               <tbody>
-                {predictionLog.map((row, index) => (
+                {predictions.map((row) => {
+                  const score = Math.round(row.confidence * 100);
+                  const verdict = row.anomaly_flag ? "FRAUD" : score > 60 ? "REVIEW" : "SAFE";
+                  const modelType = row.model_name.includes("Fraud") ? "Fraud Detector" : "Churn Predictor";
+                  return (
                   <tr
-                    key={row.id}
+                    key={row._id}
                     className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
                     onClick={() => {
-                      setSelectedPrediction(index);
+                      setSelectedPrediction(row);
                       setShowPanel(true);
                     }}
                   >
-                    <td className="px-4 py-3 text-gray-600 font-mono">{row.time}</td>
-                    <td className="px-4 py-3 text-violet-600" style={{ fontWeight: 500 }}>{row.id}</td>
+                    <td className="px-4 py-3 text-gray-600 font-mono">{formatTime(row.createdAt)}</td>
+                    <td className="px-4 py-3 text-violet-600" style={{ fontWeight: 500 }}>{row.raw_input?.transaction_id || row._id.slice(-6)}</td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full ${row.model === "Fraud Detector" ? "bg-violet-100 text-violet-700" : "bg-pink-100 text-pink-700"}`} style={{ fontWeight: 600 }}>
-                        {row.model}
+                      <span className={`px-2 py-0.5 rounded-full ${modelType === "Fraud Detector" ? "bg-violet-100 text-violet-700" : "bg-pink-100 text-pink-700"}`} style={{ fontWeight: 600 }}>
+                        {row.model_name}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`${row.score >= 75 ? "text-red-600" : row.score >= 40 ? "text-amber-600" : "text-emerald-600"}`} style={{ fontWeight: 700 }}>
-                        {row.score}%
+                      <span className={`${score >= 75 ? "text-red-600" : score >= 40 ? "text-amber-600" : "text-emerald-600"}`} style={{ fontWeight: 700 }}>
+                        {score}%
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`${row.verdict === "FRAUD" ? "text-red-600" : row.verdict === "REVIEW" ? "text-amber-600" : "text-emerald-600"}`} style={{ fontWeight: 600 }}>
-                        {row.verdict}
+                      <span className={`${verdict === "FRAUD" ? "text-red-600" : verdict === "REVIEW" ? "text-amber-600" : "text-emerald-600"}`} style={{ fontWeight: 600 }}>
+                        {verdict}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {row.confirmed
+                      {row.anomaly_flag
                         ? <span className="text-emerald-600 text-xs" style={{ fontWeight: 500 }}>✓ Confirmed</span>
                         : <span className="text-gray-400 text-xs">Pending</span>}
                     </td>
@@ -394,12 +432,12 @@ export function AnalyticsPage() {
                       <button className="text-violet-600 hover:underline text-xs">View details →</button>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
             </div>
             <div className="px-4 py-3 flex items-center justify-between border-t border-gray-100">
-              <span className="text-xs text-gray-400">Showing 7 of 342 inferences today</span>
+              <span className="text-xs text-gray-400">Showing {predictions.length} of {stats?.total || 0} inferences today</span>
               <div className="flex gap-1">
                 {["←", "1", "2", "3", "→"].map((p, i) => (
                   <button key={i} className={`w-7 h-7 rounded text-xs ${p === "1" ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}>{p}</button>
@@ -439,7 +477,7 @@ export function AnalyticsPage() {
             {/* Header */}
             <div className="sticky top-0 bg-white border-b border-gray-200 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
               <h3 className="text-gray-900 text-sm md:text-base" style={{ fontWeight: 700 }}>
-                Audit Log: Fraud Detector
+                Audit Log: {selectedPrediction?.model_name || "Model"}
               </h3>
               <button
                 onClick={() => setShowPanel(false)}
@@ -458,16 +496,7 @@ export function AnalyticsPage() {
                 </h4>
                 <div className="bg-gray-900 rounded-lg p-4">
                   <pre className="text-emerald-400 text-xs font-mono overflow-x-auto">
-{`{
-  "transaction_id": "TXN-8421",
-  "amount": 840.00,
-  "currency": "USD",
-  "ip_address": "192.168.1.1",
-  "terminal": "T-04",
-  "timestamp": "2026-04-22T10:42:18Z",
-  "merchant_id": "M-9942",
-  "card_last_four": "4829"
-}`}
+{JSON.stringify(selectedPrediction?.raw_input || { error: "No payload available" }, null, 2)}
                   </pre>
                 </div>
               </div>

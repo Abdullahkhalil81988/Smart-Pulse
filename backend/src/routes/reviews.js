@@ -68,10 +68,10 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// GET /api/reviews/:id
+// GET /api/reviews/:id — with ownership check
 router.get('/:id', auth, async (req, res) => {
   try {
-    const review = await Review.findById(req.params.id);
+    const review = await Review.findOne({ _id: req.params.id, userId: req.user.id });
     if (!review) return res.status(404).json({ error: 'Review analysis not found' });
     res.json(review);
   } catch (err) {

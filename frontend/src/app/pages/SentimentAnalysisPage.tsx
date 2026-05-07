@@ -1,64 +1,21 @@
-import { Upload, Star, ThumbsUp, Meh, ThumbsDown } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Upload, Star, ThumbsUp, Meh, ThumbsDown, Loader2 } from "lucide-react";
+import api from "../lib/api";
 
-const mockReviews = [
-  {
-    snippet: "Absolutely love this product! Fast shipping and excellent customer service.",
-    category: "Product Quality",
-    stars: 5,
-    sentiment: "Positive",
-    confidence: 98,
-  },
-  {
-    snippet: "Good value for money, but the packaging could be better.",
-    category: "Packaging",
-    stars: 4,
-    sentiment: "Positive",
-    confidence: 87,
-  },
-  {
-    snippet: "Product is okay, nothing special. Average experience overall.",
-    category: "General",
-    stars: 3,
-    sentiment: "Neutral",
-    confidence: 92,
-  },
-  {
-    snippet: "Disappointed with the quality. Does not match the description at all.",
-    category: "Product Quality",
-    stars: 2,
-    sentiment: "Negative",
-    confidence: 95,
-  },
-  {
-    snippet: "Terrible experience. Would not recommend to anyone.",
-    category: "Service",
-    stars: 1,
-    sentiment: "Negative",
-    confidence: 99,
-  },
-  {
-    snippet: "Great product! Exceeded my expectations in every way.",
-    category: "Product Quality",
-    stars: 5,
-    sentiment: "Positive",
-    confidence: 96,
-  },
-  {
-    snippet: "The item arrived damaged but customer support resolved it quickly.",
-    category: "Service",
-    stars: 4,
-    sentiment: "Positive",
-    confidence: 85,
-  },
-  {
-    snippet: "It's fine. Does what it's supposed to do, no complaints.",
-    category: "General",
-    stars: 3,
-    sentiment: "Neutral",
-    confidence: 88,
-  },
-];
+interface ReviewItem {
+  original_text: string;
+  category: string;
+  ai_rating: number;
+  sentiment: string;
+  confidence: number;
+}
+
+interface ReviewBatch {
+  _id: string;
+  predictions: ReviewItem[];
+  summary: any;
+  createdAt: string;
+}
 
 const sentimentColors = {
   Positive: "bg-emerald-100 text-emerald-700",
@@ -67,17 +24,35 @@ const sentimentColors = {
 };
 
 export function SentimentAnalysisPage() {
-  const [hasData] = useState(true);
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchReviews() {
+      try {
+        const res = await api.get<{ reviews: ReviewBatch[] }>("/api/reviews?limit=10");
+        const allReviews = res.reviews.flatMap(batch => batch.predictions);
+        setReviews(allReviews);
+      } catch (err) {
+        console.error("Failed to fetch reviews:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchReviews();
+  }, []);
+
+  const hasData = reviews.length > 0;
 
   // Calculate summary stats
-  const avgRating = (mockReviews.reduce((sum, r) => sum + r.stars, 0) / mockReviews.length).toFixed(1);
-  const totalProcessed = mockReviews.length;
-  const positiveCount = mockReviews.filter((r) => r.sentiment === "Positive").length;
-  const neutralCount = mockReviews.filter((r) => r.sentiment === "Neutral").length;
-  const negativeCount = mockReviews.filter((r) => r.sentiment === "Negative").length;
-  const positivePercent = Math.round((positiveCount / totalProcessed) * 100);
-  const neutralPercent = Math.round((neutralCount / totalProcessed) * 100);
-  const negativePercent = Math.round((negativeCount / totalProcessed) * 100);
+  const avgRating = hasData ? (reviews.reduce((sum, r) => sum + r.ai_rating, 0) / reviews.length).toFixed(1) : "0.0";
+  const totalProcessed = reviews.length;
+  const positiveCount = reviews.filter((r) => r.sentiment === "Positive").length;
+  const neutralCount = reviews.filter((r) => r.sentiment === "Neutral").length;
+  const negativeCount = reviews.filter((r) => r.sentiment === "Negative").length;
+  const positivePercent = totalProcessed ? Math.round((positiveCount / totalProcessed) * 100) : 0;
+  const neutralPercent = totalProcessed ? Math.round((neutralCount / totalProcessed) * 100) : 0;
+  const negativePercent = totalProcessed ? Math.round((negativeCount / totalProcessed) * 100) : 0;
 
   const renderStars = (count: number) => {
     return Array.from({ length: 5 }, (_, i) => (
@@ -88,6 +63,14 @@ export function SentimentAnalysisPage() {
       />
     ));
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <Loader2 size={28} className="animate-spin text-violet-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-6xl w-full">
@@ -211,12 +194,12 @@ export function SentimentAnalysisPage() {
                 </tr>
               </thead>
               <tbody>
-                {mockReviews.map((review, index) => (
+                {reviews.map((review, index) => (
                   <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-700 max-w-xs">{review.snippet}</td>
+                    <td className="px-4 py-3 text-gray-700 max-w-xs">{review.original_text}</td>
                     <td className="px-4 py-3 text-gray-600">{review.category}</td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-0.5">{renderStars(review.stars)}</div>
+                      <div className="flex gap-0.5">{renderStars(review.ai_rating)}</div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs ${sentimentColors[review.sentiment as keyof typeof sentimentColors]}`} style={{ fontWeight: 600 }}>
@@ -225,7 +208,7 @@ export function SentimentAnalysisPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-violet-600" style={{ fontWeight: 600 }}>
-                        {review.confidence}%
+                        {Math.round(review.confidence * 100)}%
                       </span>
                     </td>
                   </tr>
@@ -236,7 +219,7 @@ export function SentimentAnalysisPage() {
 
           {/* Mobile: Stacked Cards */}
           <div className="md:hidden">
-            {mockReviews.map((review, index) => (
+            {reviews.map((review, index) => (
               <div key={index} className="px-4 py-4 border-b border-gray-100 last:border-0">
                 {/* Top Row: Category + Sentiment Badge */}
                 <div className="flex items-center justify-between mb-2">
@@ -247,13 +230,13 @@ export function SentimentAnalysisPage() {
                 </div>
 
                 {/* Middle Row: Review Snippet */}
-                <p className="text-gray-700 text-xs mb-3 leading-relaxed">{review.snippet}</p>
+                <p className="text-gray-700 text-xs mb-3 leading-relaxed">{review.original_text}</p>
 
                 {/* Bottom Row: Stars + Confidence */}
                 <div className="flex items-center justify-between">
-                  <div className="flex gap-0.5">{renderStars(review.stars)}</div>
+                  <div className="flex gap-0.5">{renderStars(review.ai_rating)}</div>
                   <span className="text-violet-600 text-xs" style={{ fontWeight: 600 }}>
-                    Confidence: {review.confidence}%
+                    Confidence: {Math.round(review.confidence * 100)}%
                   </span>
                 </div>
               </div>
