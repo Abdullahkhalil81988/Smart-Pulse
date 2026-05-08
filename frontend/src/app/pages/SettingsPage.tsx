@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Settings, Users, Sliders, Building2, Zap, Plus, Trash2, Loader2 } from "lucide-react";
 import { WireframeBox } from "../components/WireframeBox";
 import api from "../lib/api";
+import { toast } from "sonner";
 
 interface BusinessProfile {
   _id: string;
@@ -24,6 +25,7 @@ export function SettingsPage() {
 
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
     async function fetchBusiness() {
@@ -115,6 +117,38 @@ export function SettingsPage() {
                   ))}
                 </div>
               </div>
+
+              {/* Dev tools (local only) */}
+              {import.meta.env.DEV && (
+                <div className="bg-white rounded-lg border border-gray-200 p-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Dev tools</p>
+                      <p className="text-gray-400 text-xs mt-0.5">Seed MongoDB with demo inventory + transactions for your user.</p>
+                    </div>
+                    <button
+                      disabled={seeding}
+                      onClick={async () => {
+                        try {
+                          setSeeding(true);
+                          await api.post("/api/dev/seed", { wipe: true, inventoryItems: 28, transactions: 80, daysBack: 45 });
+                          toast.success("Seeded demo data. Refreshing…");
+                          window.location.reload();
+                        } catch (err) {
+                          const msg = err instanceof Error ? err.message : "Failed to seed demo data";
+                          toast.error(msg);
+                        } finally {
+                          setSeeding(false);
+                        }
+                      }}
+                      className="h-9 px-4 rounded-md bg-gray-900 text-white text-sm hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                      style={{ fontWeight: 600 }}
+                    >
+                      {seeding ? "Seeding…" : "Seed demo data"}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="bg-white rounded-lg border border-gray-200 p-5">
                 <p className="text-gray-900 text-sm mb-4" style={{ fontWeight: 600 }}>Location & contact</p>

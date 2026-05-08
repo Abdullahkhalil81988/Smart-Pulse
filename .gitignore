@@ -8,6 +8,17 @@ temp_env/
 
 # Node
 node_modules/
+.vite/
+dist/
+frontend/dist/
+frontend/node_modules/
+backend/node_modules/
+.npm/
+.pnpm-store/
+.turbo/
+.next/
+.cache/
+.parcel-cache/
 .env
 *.env
 firebase-service-account.json

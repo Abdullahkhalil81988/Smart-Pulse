@@ -4,6 +4,34 @@ const Review = require('../models/Review');
 
 const REVIEWROUTE_URL = 'https://reviewroute-backend.onrender.com/predict/batch';
 const REVIEWROUTE_API_KEY = process.env.REVIEWROUTE_API_KEY;
+const REVIEWROUTE_HEALTH_URL = 'https://reviewroute-backend.onrender.com/health';
+
+// GET /api/reviews/warmup
+// Hits ReviewRoute health endpoint to mitigate cold start UX.
+router.get('/warmup', auth, async (req, res) => {
+  const startedAt = Date.now();
+  try {
+    const upstream = await fetch(REVIEWROUTE_HEALTH_URL, { method: 'GET' });
+    const contentType = upstream.headers.get('content-type') || '';
+    const data = contentType.includes('application/json')
+      ? await upstream.json().catch(() => ({}))
+      : await upstream.text().catch(() => '');
+
+    res.status(upstream.ok ? 200 : upstream.status).json({
+      ok: upstream.ok,
+      status: upstream.status,
+      elapsed_ms: Date.now() - startedAt,
+      upstream: data,
+    });
+  } catch (err) {
+    res.status(502).json({
+      ok: false,
+      status: 502,
+      elapsed_ms: Date.now() - startedAt,
+      error: err.message,
+    });
+  }
+});
 
 // POST /api/reviews/analyze
 router.post('/analyze', auth, async (req, res) => {

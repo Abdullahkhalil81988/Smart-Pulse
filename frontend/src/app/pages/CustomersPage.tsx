@@ -1,15 +1,24 @@
-import { useState } from "react";
-import { Users, ChevronRight, AlertTriangle, TrendingDown, Star, Zap, ShoppingBag, Mail } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Users, ChevronRight, AlertTriangle, TrendingDown, Star, Zap, ShoppingBag, Mail, Loader2 } from "lucide-react";
 import { WireframeBox } from "../components/WireframeBox";
+import api from "../lib/api";
 
-const customers = [
-  { id: "C-001", name: "Maria Santos", email: "maria@corp.com", spend: "$4,820", visits: 34, churn: 87, risk: "HIGH" },
-  { id: "C-004", name: "Bob Tanner", email: "bob@store.com", spend: "$620", visits: 5, churn: 71, risk: "HIGH" },
-  { id: "C-002", name: "Dave Patterson", email: "dave@biz.com", spend: "$1,250", visits: 12, churn: 42, risk: "MED" },
-  { id: "C-005", name: "Carol Meyer", email: "carol@me.com", spend: "$3,100", visits: 28, churn: 35, risk: "MED" },
-  { id: "C-003", name: "Alice Chen", email: "alice@co.com", spend: "$8,900", visits: 89, churn: 8, risk: "LOW" },
-  { id: "C-006", name: "Frank Bell", email: "frank@fb.com", spend: "$12,400", visits: 142, churn: 5, risk: "LOW" },
-];
+type Risk = "HIGH" | "MED" | "LOW";
+
+interface Customer {
+  id: string;
+  name: string;
+  email: string | null;
+  spend: number;
+  visits: number;
+  churn: number;
+  risk: Risk;
+  lastSeen: string | null;
+}
+
+interface CustomersResponse {
+  customers: Customer[];
+}
 
 const riskColor: Record<string, string> = {
   HIGH: "bg-red-100 text-red-700",
@@ -25,7 +34,28 @@ const churnBarColor = (score: number) => {
 
 export function CustomersPage() {
   const [activeTab, setActiveTab] = useState<"list" | "profile" | "atrisk">("list");
-  const [selected, setSelected] = useState(customers[0]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selected, setSelected] = useState<Customer | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchCustomers() {
+      try {
+        setLoading(true);
+        const res = await api.get<CustomersResponse>("/api/customers?limit=200");
+        const list = Array.isArray(res.customers) ? res.customers : [];
+        setCustomers(list);
+        setSelected((prev) => prev ?? list[0] ?? null);
+      } catch (err) {
+        console.error("Failed to fetch customers:", err);
+        setCustomers([]);
+        setSelected(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchCustomers();
+  }, []);
 
   const tabs = [
     { key: "list", label: "Customer list" },
@@ -33,7 +63,7 @@ export function CustomersPage() {
     { key: "atrisk", label: "At-risk list" },
   ] as const;
 
-  const atRisk = [...customers].sort((a, b) => b.churn - a.churn);
+  const atRisk = useMemo(() => [...customers].sort((a, b) => b.churn - a.churn), [customers]);
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-6xl w-full">
@@ -82,7 +112,23 @@ export function CustomersPage() {
               </tr>
             </thead>
             <tbody>
-              {customers.map((c) => (
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-16 text-center text-gray-400">
+                    <Loader2 size={26} className="animate-spin mx-auto mb-2" />
+                    <p>Loading customers…</p>
+                  </td>
+                </tr>
+              ) : customers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-16 text-center text-gray-400">
+                    <Users size={28} className="mx-auto mb-2 opacity-40" />
+                    <p>No customers yet.</p>
+                    <p className="text-[11px] mt-1">Create some POS transactions to populate this list.</p>
+                  </td>
+                </tr>
+              ) : (
+              customers.map((c) => (
                 <tr
                   key={c.id}
                   className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
@@ -99,7 +145,9 @@ export function CustomersPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-500">{c.email}</td>
-                  <td className="px-4 py-3 text-gray-900" style={{ fontWeight: 600 }}>{c.spend}</td>
+                  <td className="px-4 py-3 text-gray-900" style={{ fontWeight: 600 }}>
+                    ${c.spend.toLocaleString()}
+                  </td>
                   <td className="px-4 py-3 text-gray-500">{c.visits}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -116,14 +164,14 @@ export function CustomersPage() {
                   </td>
                   <td className="px-4 py-3"><ChevronRight size={13} className="text-gray-300" /></td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
           </div>
         </div>
       )}
 
-      {activeTab === "profile" && (
+      {activeTab === "profile" && selected && (
         <div className="space-y-4">
           {/* Header Card */}
           <div className="bg-white rounded-lg border border-gray-200 p-5">
@@ -140,11 +188,13 @@ export function CustomersPage() {
                   <span className={`px-2 py-0.5 rounded-full text-xs ${riskColor[selected.risk]}`} style={{ fontWeight: 600 }}>
                     {selected.risk} RISK
                   </span>
-                  <span className="text-gray-400 text-xs">Member since Jan 2024</span>
+                  <span className="text-gray-400 text-xs">
+                    Last seen {selected.lastSeen ? new Date(selected.lastSeen).toLocaleDateString() : "—"}
+                  </span>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>{selected.spend}</p>
+                <p className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>${selected.spend.toLocaleString()}</p>
                 <p className="text-gray-400 text-xs">lifetime spend</p>
               </div>
             </div>
@@ -326,7 +376,9 @@ export function CustomersPage() {
             </div>
             <div className="col-span-2 md:col-span-1 bg-white rounded-lg border border-gray-200 border-l-4 border-l-pink-400 text-pink-700 p-3 md:p-4">
               <p className="text-gray-500 text-xs">Total at-risk revenue</p>
-              <p className="mt-1 text-lg md:text-2xl" style={{ fontWeight: 700 }}>$5,440</p>
+              <p className="mt-1 text-lg md:text-2xl" style={{ fontWeight: 700 }}>
+                ${customers.filter((c) => c.risk !== "LOW").reduce((s, c) => s + c.spend, 0).toLocaleString()}
+              </p>
             </div>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -368,8 +420,8 @@ export function CustomersPage() {
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full ${riskColor[c.risk]}`} style={{ fontWeight: 600 }}>{c.risk}</span>
                     </td>
-                    <td className="px-4 py-3 text-gray-700" style={{ fontWeight: 600 }}>{c.spend}</td>
-                    <td className="px-4 py-3 text-gray-400">3 days ago</td>
+                    <td className="px-4 py-3 text-gray-700" style={{ fontWeight: 600 }}>${c.spend.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-gray-400">{c.lastSeen ? new Date(c.lastSeen).toLocaleDateString() : "—"}</td>
                     <td className="px-4 py-3">
                       <button className="px-2 py-1 rounded bg-pink-50 border border-pink-200 text-pink-600 hover:bg-pink-100 transition-colors" style={{ fontWeight: 500 }}>
                         Act ›
@@ -417,7 +469,9 @@ export function CustomersPage() {
 
                   {/* Bottom Row: Last seen (left), Action button (right) */}
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-400 text-xs">Last seen: 3 days ago</span>
+                    <span className="text-gray-400 text-xs">
+                      Last seen: {c.lastSeen ? new Date(c.lastSeen).toLocaleDateString() : "—"}
+                    </span>
                     <button className="px-3 py-1.5 rounded bg-pink-50 border border-pink-200 text-pink-600 hover:bg-pink-100 transition-colors text-xs" style={{ fontWeight: 500 }}>
                       Act ›
                     </button>

@@ -15,6 +15,8 @@ const reviewRoutes      = require('./routes/reviews');
 const inventoryRoutes   = require('./routes/inventory');
 const posRoutes         = require('./routes/pos');
 const salesRoutes       = require('./routes/sales');
+const customerRoutes    = require('./routes/customers');
+const devRoutes         = require('./routes/dev');
 
 const app    = express();
 const server = http.createServer(app);
@@ -61,6 +63,10 @@ app.use('/api/reviews',     reviewRoutes);
 app.use('/api/inventory',   inventoryRoutes);
 app.use('/api/pos',         posRoutes);
 app.use('/api/sales',       salesRoutes);
+app.use('/api/customers',   customerRoutes);
+
+// dev-only helpers (seed, diagnostics) - guarded inside route file
+app.use('/api/dev',         devRoutes);
 
 app.use((req, res) => {
   console.warn(`[api] 404 ${req.method} ${req.originalUrl}`);
@@ -76,7 +82,7 @@ app.use((err, req, res, _next) => {
 });
 
 // ── start ───────────────────────────────────────────────────
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 connectDB()
   .then(() => server.listen(PORT, () => console.log(`Server running on port ${PORT}`)))

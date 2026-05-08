@@ -33,9 +33,21 @@ const sentimentColors = {
 export function SentimentAnalysisPage() {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [warmingUp, setWarmingUp] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function warmup() {
+    try {
+      setWarmingUp(true);
+      await api.get("/api/reviews/warmup");
+    } catch {
+      // warmup is best-effort; ignore errors
+    } finally {
+      setWarmingUp(false);
+    }
+  }
 
   async function fetchReviews() {
     try {
@@ -50,6 +62,7 @@ export function SentimentAnalysisPage() {
   }
 
   useEffect(() => {
+    warmup();
     fetchReviews();
   }, []);
 
@@ -155,6 +168,11 @@ export function SentimentAnalysisPage() {
         <p className="text-gray-500 text-xs md:text-sm mt-0.5">
           Upload customer reviews and analyze sentiment with AI
         </p>
+        {warmingUp && (
+          <p className="text-gray-400 text-[11px] mt-1">
+            Warming up the AI service (first request can take ~1 minute after idle)…
+          </p>
+        )}
       </div>
 
       {/* Zone 1: Upload Area */}
