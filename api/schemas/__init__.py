@@ -24,3 +24,4 @@ class PredictionResult(BaseModel):
     anomaly_flag: bool = False
     pca_x: Optional[float] = None
     pca_y: Optional[float] = None
+    historical_data: Optional[list[dict]] = None

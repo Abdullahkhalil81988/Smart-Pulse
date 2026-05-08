@@ -53,6 +53,7 @@ def predict(df: pd.DataFrame, model_type: Optional[str] = None) -> dict:
     anomaly_flag = False
     pca_x = None
     pca_y = None
+    historical_data = None
 
     if model_type == "forecaster":
         model = joblib.load(_latest_model_path("forecaster"))
@@ -62,6 +63,21 @@ def predict(df: pd.DataFrame, model_type: Optional[str] = None) -> dict:
         pred_value = float(model.predict(X.tail(1))[0])
         confidence = 1.0
         model_name = _latest_model_path("forecaster").stem
+
+        # Extract historical data manually for the frontend chart
+        df_copy = df.copy()
+        if "Price" in df_copy.columns and "UnitPrice" not in df_copy.columns:
+            df_copy = df_copy.rename(columns={"Price": "UnitPrice"})
+        df_copy["InvoiceDate"] = pd.to_datetime(df_copy["InvoiceDate"], errors="coerce")
+        df_copy = df_copy.dropna(subset=["InvoiceDate"])
+        df_copy["revenue"] = df_copy["Quantity"] * df_copy["UnitPrice"]
+        df_copy["month"] = df_copy["InvoiceDate"].dt.to_period("M").dt.to_timestamp()
+        monthly = df_copy.groupby("month", as_index=False)["revenue"].sum().sort_values("month")
+        
+        historical_data = [
+            {"date": row["month"].strftime("%Y-%m-%d"), "actual": float(row["revenue"])}
+            for _, row in monthly.tail(12).iterrows()
+        ]
 
     elif model_type == "classifier":
         best_path = Path(MODEL_DIR) / "classifier_best.joblib"
@@ -124,4 +140,5 @@ def predict(df: pd.DataFrame, model_type: Optional[str] = None) -> dict:
         "anomaly_flag": anomaly_flag,
         "pca_x": pca_x,
         "pca_y": pca_y,
+        "historical_data": historical_data,
     }

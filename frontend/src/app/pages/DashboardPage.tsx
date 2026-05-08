@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { AlertTriangle, Activity, Upload, Loader2, Inbox } from "lucide-react";
-import { WireframeBox } from "../components/WireframeBox";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import api from "../lib/api";
 
 /* ─── types ──────────────────────────────────────────────── */
@@ -29,6 +29,13 @@ interface PredictionItem {
   confidence: number;
   anomaly_flag: boolean;
   createdAt: string;
+}
+
+interface MLPredictionResult {
+  prediction: number;
+  confidence: number;
+  model_name: string;
+  historical_data?: { date: string; actual: number }[];
 }
 
 /* ─── helpers ────────────────────────────────────────────── */
@@ -68,25 +75,53 @@ export function DashboardPage() {
   const [predictions, setPredictions] = useState<PredictionItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function fetchDashboard() {
-      try {
-        const [statsRes, alertsRes, predsRes] = await Promise.all([
-          api.get<PredictionStats>("/api/predictions/stats"),
-          api.get<AlertItem[]>("/api/alerts?limit=5"),
-          api.get<{ predictions: PredictionItem[] }>("/api/predictions?limit=6"),
-        ]);
-        setStats(statsRes);
-        setAlerts(alertsRes);
-        setPredictions(predsRes.predictions);
-      } catch (err) {
-        console.error("Dashboard fetch error:", err);
-      } finally {
-        setLoading(false);
-      }
+  // Forecaster states
+  const [forecastData, setForecastData] = useState<MLPredictionResult | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchDashboard = useCallback(async () => {
+    try {
+      const [statsRes, alertsRes, predsRes] = await Promise.all([
+        api.get<PredictionStats>("/api/predictions/stats"),
+        api.get<AlertItem[]>("/api/alerts?limit=5"),
+        api.get<{ predictions: PredictionItem[] }>("/api/predictions?limit=6"),
+      ]);
+      setStats(statsRes);
+      setAlerts(alertsRes);
+      setPredictions(predsRes.predictions);
+    } catch (err) {
+      console.error("Dashboard fetch error:", err);
+    } finally {
+      setLoading(false);
     }
-    fetchDashboard();
   }, []);
+
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setIsUploading(true);
+    try {
+      const res = await api.upload<MLPredictionResult>("/api/ml/predict?model_type=forecaster", formData);
+      setForecastData(res);
+      // Refresh predictions and stats to show the newly logged prediction
+      await fetchDashboard();
+    } catch (err) {
+      console.error("Upload failed", err);
+      alert("Failed to process CSV. Make sure it has retail schema (InvoiceDate, Quantity, UnitPrice).");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
   if (loading) {
     return (
@@ -127,6 +162,29 @@ export function DashboardPage() {
     day: "numeric",
     year: "numeric",
   });
+
+  // Prepare chart data if forecast exists
+  let chartData: any[] = [];
+  if (forecastData && forecastData.historical_data) {
+    chartData = forecastData.historical_data.map((d) => ({
+      name: new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+      Actual: d.actual,
+      Forecast: null,
+    }));
+    
+    // Add the forecasted point. We'll connect the last actual point to the forecast.
+    if (chartData.length > 0) {
+      const lastActual = chartData[chartData.length - 1];
+      // Start the forecast line from the last actual point so it connects smoothly
+      lastActual.Forecast = lastActual.Actual;
+      
+      chartData.push({
+        name: "Next Month",
+        Actual: null,
+        Forecast: forecastData.prediction,
+      });
+    }
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-6xl w-full">
@@ -176,14 +234,40 @@ export function DashboardPage() {
               <h3 className="text-gray-900 text-sm mb-4" style={{ fontWeight: 600 }}>Revenue Goal Pacing</h3>
 
               {/* Large Number */}
-              <div className="text-center mb-5">
-                <p className="text-gray-400 text-xs">Upload retail CSV to populate</p>
+              <div className="text-center mb-5 h-16 flex flex-col justify-center">
+                {forecastData ? (
+                  <>
+                    <p className="text-emerald-600 text-3xl font-bold">
+                      ${forecastData.prediction.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">Predicted next month revenue</p>
+                  </>
+                ) : (
+                  <p className="text-gray-400 text-xs">Upload retail CSV to populate</p>
+                )}
               </div>
 
               {/* CSV Upload Drop Zone */}
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 hover:bg-gray-50 transition-all cursor-pointer">
-                <Upload size={20} className="text-gray-400 mx-auto mb-1.5" />
-                <p className="text-gray-700 text-xs" style={{ fontWeight: 600 }}>Drop monthly retail CSV here</p>
+              <div 
+                className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 hover:bg-gray-50 transition-all cursor-pointer relative"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input 
+                  type="file" 
+                  accept=".csv" 
+                  className="hidden" 
+                  ref={fileInputRef} 
+                  onChange={handleFileUpload} 
+                  disabled={isUploading}
+                />
+                {isUploading ? (
+                  <Loader2 size={20} className="text-violet-600 animate-spin mx-auto mb-1.5" />
+                ) : (
+                  <Upload size={20} className="text-gray-400 mx-auto mb-1.5" />
+                )}
+                <p className="text-gray-700 text-xs" style={{ fontWeight: 600 }}>
+                  {isUploading ? "Processing Model..." : "Drop monthly retail CSV here"}
+                </p>
               </div>
             </div>
 
@@ -203,7 +287,33 @@ export function DashboardPage() {
                   </span>
                 </div>
               </div>
-              <WireframeBox label="Line chart — Revenue vs Forecast" note="X: days  Y: $ revenue" height={200} />
+              <div className="h-[200px] w-full mt-4">
+                {chartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} dy={10} />
+                      <YAxis 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#6B7280' }} 
+                        tickFormatter={(value) => `$${value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value}`}
+                        dx={-10}
+                      />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '8px', border: '1px solid #E5E7EB', fontSize: '12px' }}
+                        formatter={(value: number) => [`$${value.toLocaleString()}`, ""]}
+                      />
+                      <Line type="monotone" dataKey="Actual" stroke="#10B981" strokeWidth={3} dot={{ r: 3, fill: "#10B981" }} activeDot={{ r: 5 }} connectNulls />
+                      <Line type="monotone" dataKey="Forecast" stroke="#9CA3AF" strokeWidth={3} strokeDasharray="5 5" dot={{ r: 4, fill: "#9CA3AF" }} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="w-full h-full border border-dashed border-gray-200 rounded flex items-center justify-center bg-gray-50">
+                    <p className="text-xs text-gray-400">Chart will appear after CSV upload</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

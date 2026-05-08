@@ -174,6 +174,7 @@ def test_predict_returns_required_schema(tmp_path: Path, monkeypatch) -> None:
         "anomaly_flag",
         "pca_x",
         "pca_y",
+        "historical_data",
     }
 
 
@@ -210,6 +211,7 @@ def test_predict_classifier_with_phase2_outputs(tmp_path: Path, monkeypatch) -> 
         "anomaly_flag",
         "pca_x",
         "pca_y",
+        "historical_data",
     }
     assert output["cluster_label"] is None or isinstance(output["cluster_label"], int)
     assert isinstance(output["anomaly_flag"], bool)
