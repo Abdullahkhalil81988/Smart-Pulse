@@ -25,7 +25,8 @@ router.post('/checkout', auth, async (req, res) => {
       tax, 
       total, 
       paymentMethod, 
-      note 
+      note,
+      customerName
     } = req.body;
 
     if (!items || items.length === 0) {
@@ -67,6 +68,7 @@ router.post('/checkout', auth, async (req, res) => {
     const transaction = await Transaction.create({
       userId: req.user.id,
       billNo: String(billNo),
+      customerName: customerName || 'Guest',
       items,
       subtotal,
       discountPct,
@@ -87,6 +89,50 @@ router.post('/checkout', auth, async (req, res) => {
   } catch (err) {
     console.error('POS Checkout Error:', err);
     res.status(500).json({ error: 'Internal server error during checkout' });
+  }
+});
+
+// GET /api/pos/transactions
+// List transactions with search filters
+router.get('/transactions', auth, async (req, res) => {
+  try {
+    const { search, date } = req.query;
+    let query = { userId: req.user.id };
+
+    if (search) {
+      query.$or = [
+        { billNo: { $regex: search, $options: 'i' } },
+        { customerName: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    if (date) {
+      const start = new Date(date);
+      start.setHours(0,0,0,0);
+      const end = new Date(date);
+      end.setHours(23,59,59,999);
+      query.createdAt = { $gte: start, $lte: end };
+    }
+
+    const transactions = await Transaction.find(query).sort({ createdAt: -1 });
+    res.json(transactions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/pos/transactions/:id
+// Get detail for a specific transaction
+router.get('/transactions/:id', auth, async (req, res) => {
+  try {
+    const transaction = await Transaction.findOne({ 
+      _id: req.params.id, 
+      userId: req.user.id 
+    });
+    if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
+    res.json(transaction);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

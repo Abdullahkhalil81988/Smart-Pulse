@@ -10,6 +10,10 @@ const TransactionSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  customerName: {
+    type: String,
+    default: 'Guest'
+  },
   items: [{
     code: String,
     name: String,

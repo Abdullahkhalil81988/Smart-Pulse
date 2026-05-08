@@ -47,6 +47,7 @@ export function POSPage() {
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [customerName, setCustomerName] = useState("");
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -158,6 +159,7 @@ export function POSPage() {
     setCharged(false);
     setDiscountPct(0);
     setNote("");
+    setCustomerName("");
     setError("");
     // Re-fetch inventory & next bill no to get latest state
     Promise.all([
@@ -185,7 +187,8 @@ export function POSPage() {
         tax,
         total,
         paymentMethod,
-        note
+        note,
+        customerName
       });
       setCharged(true);
       if (response.nextBillNo) setBillNo(response.nextBillNo);
@@ -554,6 +557,23 @@ export function POSPage() {
                 </div>
               </div>
 
+              {/* Customer info */}
+              <div className="space-y-3">
+                <p className="text-xs text-gray-500" style={{ fontWeight: 500 }}>Customer Name <span className="text-red-500">*</span></p>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search size={14} className="text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search or enter name..."
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    className="block w-full h-11 pl-9 pr-3 text-sm bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all outline-none"
+                  />
+                </div>
+              </div>
+
               {/* Payment method */}
               <div className="space-y-3">
                 <p className="text-xs text-gray-500" style={{ fontWeight: 500 }}>Payment method</p>
@@ -589,16 +609,16 @@ export function POSPage() {
               {/* Charge button */}
               <button
                 onClick={handleCharge}
-                disabled={cart.length === 0 || processing}
+                disabled={cart.length === 0 || processing || !customerName.trim()}
                 className={`w-full h-14 rounded-xl text-base transition-all flex items-center justify-center gap-2 ${
-                  cart.length === 0 || processing
+                  cart.length === 0 || processing || !customerName.trim()
                     ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                     : "bg-gray-900 hover:bg-gray-700 text-white shadow-md hover:shadow-lg"
                 }`}
                 style={{ fontWeight: 700 }}
               >
                 {processing && <Loader2 size={18} className="animate-spin" />}
-                {processing ? "Processing..." : cart.length === 0 ? "Add items to charge" : `Charge $${total.toFixed(2)}`}
+                {processing ? "Processing..." : cart.length === 0 ? "Add items to charge" : !customerName.trim() ? "Enter customer name" : `Charge $${total.toFixed(2)}`}
               </button>
 
             </div>
