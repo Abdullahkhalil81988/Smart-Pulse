@@ -8,11 +8,14 @@ const FASTAPI_URL = process.env.FASTAPI_URL || 'http://localhost:8000';
 // POST /api/ml/predict  — proxy to FastAPI, save result to MongoDB
 router.post('/predict', auth, async (req, res) => {
   try {
-    const FormData = (await import('node:stream')).PassThrough;
+    const headers = { ...req.headers };
+    delete headers['host'];
+    delete headers['content-length'];
+
     // forward the raw multipart request to FastAPI
     const fastapiRes = await fetch(`${FASTAPI_URL}/api/v1/predict${req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''}`, {
       method: 'POST',
-      headers: { ...req.headers, host: undefined },
+      headers,
       body: req,
       duplex: 'half',
     });
@@ -64,9 +67,13 @@ router.post('/predict', auth, async (req, res) => {
 // POST /api/ml/ingest  — proxy CSV upload to FastAPI /ingest
 router.post('/ingest', auth, async (req, res) => {
   try {
+    const headers = { ...req.headers };
+    delete headers['host'];
+    delete headers['content-length'];
+
     const fastapiRes = await fetch(`${FASTAPI_URL}/api/v1/ingest`, {
       method: 'POST',
-      headers: { ...req.headers, host: undefined },
+      headers,
       body: req,
       duplex: 'half',
     });
