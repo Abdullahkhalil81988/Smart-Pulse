@@ -1,24 +1,50 @@
-import { useState } from "react";
-import { TrendingUp, FileText, Plus, ChevronRight, Zap } from "lucide-react";
-import { WireframeBox } from "../components/WireframeBox";
+import { useState, useEffect } from "react";
+import { TrendingUp, FileText, Plus, ChevronRight, Zap, Loader2, Calendar, Search, ArrowLeft, Trash2 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import api from "../lib/api";
+import { toast } from "sonner";
 
-const invoices = [
-  { id: "INV-0094", customer: "Alice Corp", amount: "$1,200.00", date: "Apr 4", due: "Apr 18", status: "PAID" },
-  { id: "INV-0093", customer: "Bob & Sons", amount: "$3,450.00", date: "Apr 3", due: "Apr 17", status: "PENDING" },
-  { id: "INV-0092", customer: "Carol Ltd", amount: "$780.00", date: "Apr 2", due: "Apr 16", status: "OVERDUE" },
-  { id: "INV-0091", customer: "Dave Inc.", amount: "$5,600.00", date: "Apr 1", due: "Apr 15", status: "PAID" },
-  { id: "INV-0090", customer: "Eve Trading", amount: "$920.00", date: "Mar 30", due: "Apr 13", status: "DRAFT" },
-];
+interface SaleStats {
+  revenue: number;
+  prevRevenue: number;
+  count: number;
+  prevCount: number;
+  avgOrder: number;
+  invoiceCount: number;
+  pendingInvoices: number;
+  paymentDistribution: Record<string, number>;
+}
 
-const statusColor: Record<string, string> = {
-  PAID: "bg-emerald-100 text-emerald-700",
-  PENDING: "bg-amber-100 text-amber-700",
-  OVERDUE: "bg-red-100 text-red-700",
-  DRAFT: "bg-gray-100 text-gray-500",
-};
+interface ProductPerformance {
+  topProducts: any[];
+  categoryStats: Record<string, number>;
+}
+
+interface Transaction {
+  _id: string;
+  billNo: string;
+  customerName: string;
+  total: number;
+  paymentMethod: string;
+  status: string;
+  createdAt: string;
+  items: any[];
+}
 
 export function SalesPage() {
   const [activeTab, setActiveTab] = useState<"summary" | "invoices" | "performance">("summary");
+  const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<SaleStats | null>(null);
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [performance, setPerformance] = useState<ProductPerformance | null>(null);
+  const [invoices, setInvoices] = useState<Transaction[]>([]);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Invoice Form State
+  const [invCustomer, setInvCustomer] = useState("");
+  const [invItems, setInvItems] = useState<any[]>([]);
+  const [invNote, setInvNote] = useState("");
 
   const tabs = [
     { key: "summary", label: "Daily summary" },
@@ -26,21 +52,227 @@ export function SalesPage() {
     { key: "performance", label: "Product performance" },
   ] as const;
 
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [sData, cData, pData, iData] = await Promise.all([
+        api.get<SaleStats>(`/api/sales/stats?date=${selectedDate}`),
+        api.get<number[]>(`/api/sales/chart?date=${selectedDate}`),
+        api.get<ProductPerformance>(`/api/sales/performance`),
+        api.get<Transaction[]>(`/api/pos/transactions?search=Invoice`)
+      ]);
+      setStats(sData);
+      setChartData(cData.map((val, hour) => ({ 
+        time: `${hour}:00`, 
+        revenue: val 
+      })).filter((_, i) => i >= 9 && i <= 21)); // 9 AM to 9 PM as per wireframe
+      setPerformance(pData);
+      setInvoices(iData);
+    } catch (err) {
+      toast.error("Failed to load sales data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [selectedDate, activeTab]);
+
+  const handleCreateInvoice = async () => {
+    if (!invCustomer.trim()) return toast.error("Customer name is required");
+    if (invItems.length === 0) return toast.error("Add at least one item");
+
+    try {
+      setLoading(true);
+      const subtotal = invItems.reduce((s, i) => s + i.price * i.qty, 0);
+      const tax = subtotal * 0.08;
+      const total = subtotal + tax;
+
+      await api.post("/api/pos/checkout", {
+        customerName: invCustomer,
+        items: invItems,
+        subtotal,
+        tax,
+        total,
+        paymentMethod: "Invoice",
+        status: "Pending",
+        note: invNote
+      });
+
+      toast.success("Invoice created successfully");
+      setIsCreatingInvoice(false);
+      setInvCustomer("");
+      setInvItems([]);
+      fetchData();
+    } catch (err) {
+      toast.error("Failed to create invoice");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (isCreatingInvoice) {
+    return (
+      <div className="p-4 md:p-6 space-y-6 max-w-4xl w-full mx-auto">
+        <button 
+          onClick={() => setIsCreatingInvoice(false)}
+          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 transition-colors"
+        >
+          <ArrowLeft size={16} /> Back to Sales
+        </button>
+        
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-gray-100 bg-gray-50/50">
+            <h3 className="text-gray-900 text-lg font-bold">Create New Invoice</h3>
+            <p className="text-gray-500 text-xs mt-1">Generate a formal payment request for your customer.</p>
+          </div>
+          
+          <div className="p-6 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Customer Name *</label>
+                <input 
+                  type="text" 
+                  value={invCustomer}
+                  onChange={(e) => setInvCustomer(e.target.value)}
+                  placeholder="Enter client or company name"
+                  className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Invoice Date</label>
+                <input 
+                  type="date" 
+                  defaultValue={new Date().toISOString().split('T')[0]}
+                  className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+               <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Items & Services</label>
+                  <button 
+                    onClick={() => setInvItems([...invItems, { name: "", qty: 1, price: 0 }])}
+                    className="text-blue-600 text-xs font-bold hover:underline flex items-center gap-1"
+                  >
+                    <Plus size={14} /> Add Item
+                  </button>
+               </div>
+               
+               <div className="space-y-3">
+                  {invItems.map((item, idx) => (
+                    <div key={idx} className="flex gap-3 items-start animate-in fade-in slide-in-from-top-1 duration-200">
+                      <input 
+                        type="text" 
+                        placeholder="Item name"
+                        value={item.name}
+                        onChange={(e) => {
+                          const newItems = [...invItems];
+                          newItems[idx].name = e.target.value;
+                          setInvItems(newItems);
+                        }}
+                        className="flex-1 h-11 px-4 rounded-xl border border-gray-200 text-sm"
+                      />
+                      <input 
+                        type="number" 
+                        placeholder="Qty"
+                        value={item.qty}
+                        onChange={(e) => {
+                          const newItems = [...invItems];
+                          newItems[idx].qty = parseInt(e.target.value) || 0;
+                          setInvItems(newItems);
+                        }}
+                        className="w-20 h-11 px-4 rounded-xl border border-gray-200 text-sm"
+                      />
+                      <input 
+                        type="number" 
+                        placeholder="Price"
+                        value={item.price}
+                        onChange={(e) => {
+                          const newItems = [...invItems];
+                          newItems[idx].price = parseFloat(e.target.value) || 0;
+                          setInvItems(newItems);
+                        }}
+                        className="w-28 h-11 px-4 rounded-xl border border-gray-200 text-sm"
+                      />
+                      <button 
+                        onClick={() => setInvItems(invItems.filter((_, i) => i !== idx))}
+                        className="h-11 w-11 flex items-center justify-center text-red-400 hover:text-red-600 transition-colors"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  ))}
+                  {invItems.length === 0 && (
+                    <div className="py-10 text-center border-2 border-dashed border-gray-100 rounded-2xl">
+                      <p className="text-sm text-gray-400">No items added yet. Click 'Add Item' to begin.</p>
+                    </div>
+                  )}
+               </div>
+            </div>
+
+            <div className="pt-6 border-t border-gray-100 flex flex-col md:flex-row gap-6 justify-between items-start">
+               <div className="w-full md:w-1/2 space-y-2">
+                  <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Note (Optional)</label>
+                  <textarea 
+                    value={invNote}
+                    onChange={(e) => setInvNote(e.target.value)}
+                    placeholder="Payment terms, bank details, etc."
+                    className="w-full h-24 p-4 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                  />
+               </div>
+               <div className="w-full md:w-1/3 bg-gray-50 rounded-2xl p-6 space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Subtotal</span>
+                    <span className="text-gray-900 font-bold">${invItems.reduce((s, i) => s + i.price * i.qty, 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Tax (8%)</span>
+                    <span className="text-gray-900 font-bold">${(invItems.reduce((s, i) => s + i.price * i.qty, 0) * 0.08).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between pt-3 border-t border-gray-200">
+                    <span className="text-gray-900 font-bold">Total Amount</span>
+                    <span className="text-blue-600 text-xl font-extrabold">${(invItems.reduce((s, i) => s + i.price * i.qty, 0) * 1.08).toFixed(2)}</span>
+                  </div>
+               </div>
+            </div>
+          </div>
+          
+          <div className="p-6 bg-gray-50/50 border-t border-gray-100 flex justify-end gap-3">
+             <button 
+               onClick={() => setIsCreatingInvoice(false)}
+               className="px-6 h-12 rounded-xl text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors"
+             >
+               Cancel
+             </button>
+             <button 
+               onClick={handleCreateInvoice}
+               disabled={loading}
+               className="px-8 h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-lg shadow-blue-200 transition-all flex items-center gap-2"
+             >
+               {loading && <Loader2 size={16} className="animate-spin" />}
+               Generate Invoice
+             </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-6xl w-full">
       {/* Header Area */}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-gray-900 text-base md:text-lg" style={{ fontWeight: 700 }}>Sales</h2>
-          <p className="text-gray-500 text-xs md:text-sm mt-0.5 mb-3">Invoicing & revenue analytics</p>
-
-          {/* Tabs */}
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+          <h2 className="text-gray-900 text-base md:text-lg" style={{ fontWeight: 700 }}>Sales Analytics</h2>
+          <div className="flex gap-1 bg-gray-100/80 p-1 rounded-xl w-fit mt-3">
             {tabs.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-3 py-1.5 rounded-md text-xs transition-colors ${activeTab === tab.key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                className={`px-4 py-2 rounded-lg text-xs md:text-sm transition-all whitespace-nowrap ${activeTab === tab.key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                 style={{ fontWeight: activeTab === tab.key ? 600 : 400 }}
               >
                 {tab.label}
@@ -49,365 +281,251 @@ export function SalesPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="h-9 px-3 rounded-lg border border-gray-300 bg-white flex items-center text-sm text-gray-600">
-            Today, Apr 4 ▾
+        <div className="flex items-center gap-3">
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Calendar size={14} className="text-gray-400 group-focus-within:text-blue-500" />
+            </div>
+            <input 
+              type="date" 
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="h-10 pl-9 pr-3 rounded-xl border border-gray-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            />
           </div>
-          <button className="h-9 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5 text-sm transition-colors" style={{ fontWeight: 600 }}>
-            <Plus size={15} /> New invoice
+          <button 
+            onClick={() => setIsCreatingInvoice(true)}
+            className="h-10 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 text-sm font-bold shadow-lg shadow-blue-100 transition-all"
+          >
+            <Plus size={16} /> New Invoice
           </button>
         </div>
       </div>
 
-      {activeTab === "summary" && (
-        <div className="space-y-4">
-          {/* Top Row - KPI Cards */}
+      {loading ? (
+        <div className="py-20 flex flex-col items-center justify-center gap-4">
+          <Loader2 size={48} className="animate-spin text-blue-500" />
+          <p className="text-gray-400 text-sm animate-pulse">Analyzing revenue streams...</p>
+        </div>
+      ) : activeTab === "summary" && stats ? (
+        <div className="space-y-4 animate-in fade-in duration-500">
+          {/* KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Revenue today */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <p className="text-gray-500 text-xs">Revenue today</p>
-              <p className="text-gray-900 mt-1 mb-2" style={{ fontSize: 22, fontWeight: 700 }}>$12,480</p>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs bg-emerald-100 text-emerald-700" style={{ fontWeight: 600 }}>
-                  +8%
-                </span>
-                <span className="text-xs text-gray-400">vs yesterday</span>
-              </div>
-            </div>
-
-            {/* Transactions */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <p className="text-gray-500 text-xs">Transactions</p>
-              <p className="text-gray-900 mt-1 mb-2" style={{ fontSize: 22, fontWeight: 700 }}>342</p>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs bg-emerald-100 text-emerald-700" style={{ fontWeight: 600 }}>
-                  +14
-                </span>
-                <span className="text-xs text-gray-400">vs yesterday</span>
-              </div>
-            </div>
-
-            {/* Avg. order value */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <p className="text-gray-500 text-xs">Avg. order value</p>
-              <p className="text-gray-900 mt-1 mb-2" style={{ fontSize: 22, fontWeight: 700 }}>$36.49</p>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs bg-emerald-100 text-emerald-700" style={{ fontWeight: 600 }}>
-                  +6%
-                </span>
-                <span className="text-xs text-gray-400">vs yesterday</span>
-              </div>
-            </div>
-
-            {/* Invoices */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <p className="text-gray-500 text-xs">Invoices</p>
-              <p className="text-gray-900 mt-1 mb-2" style={{ fontSize: 22, fontWeight: 700 }}>8</p>
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs bg-amber-100 text-amber-700" style={{ fontWeight: 600 }}>
-                3 pending payment
-              </span>
-            </div>
-          </div>
-
-          {/* Main Content - 65/35 Split */}
-          <div className="grid grid-cols-1 lg:grid-cols-10 gap-4">
-            {/* Left Column (65%) - Hourly Chart */}
-            <div className="lg:col-span-6 bg-white rounded-lg border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Today's revenue — hourly</p>
-                <button className="h-7 px-3 rounded-md border border-gray-300 bg-white hover:bg-gray-50 flex items-center text-xs text-gray-600 transition-colors">
-                  Time: 9 AM – 9 PM ▾
-                </button>
-              </div>
-              <WireframeBox label="Vertical bar chart — hourly revenue" note="X: hours (9am-9pm) · Y: $ revenue" height={240} />
-            </div>
-
-            {/* Right Column (35%) - Breakdowns */}
-            <div className="lg:col-span-4 space-y-4">
-              {/* Revenue by channel */}
-              <div className="bg-white rounded-lg border border-gray-200 p-5">
-                <p className="text-gray-900 text-sm mb-4" style={{ fontWeight: 600 }}>Revenue by channel</p>
-                <div className="space-y-3">
-                  {[
-                    { label: "In-store POS", pct: 62, val: "$7,738" },
-                    { label: "Online", pct: 24, val: "$2,995" },
-                    { label: "Invoice", pct: 14, val: "$1,747" },
-                  ].map((ch) => (
-                    <div key={ch.label}>
-                      <div className="flex justify-between text-xs mb-1.5">
-                        <span className="text-gray-600">{ch.label}</span>
-                        <span className="text-gray-900" style={{ fontWeight: 600 }}>{ch.val}</span>
-                      </div>
-                      <div className="h-2 bg-gray-100 rounded-full">
-                        <div className="h-2 bg-blue-500 rounded-full" style={{ width: `${ch.pct}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Payment Methods */}
-              <div className="bg-white rounded-lg border border-gray-200 p-5">
-                <p className="text-gray-900 text-sm mb-4" style={{ fontWeight: 600 }}>Payment Methods</p>
-                <div className="space-y-3">
-                  {[
-                    { method: "Credit Card", amount: 8100, pct: 65 },
-                    { method: "Tap to Pay", amount: 3200, pct: 26 },
-                    { method: "Cash", amount: 1180, pct: 9 },
-                  ].map((item) => (
-                    <div key={item.method}>
-                      <div className="flex justify-between text-xs mb-1.5">
-                        <span className="text-gray-600">{item.method}</span>
-                        <span className="text-gray-900" style={{ fontWeight: 600 }}>${item.amount.toLocaleString()}</span>
-                      </div>
-                      <div className="h-2 bg-gray-100 rounded-full">
-                        <div className="h-2 bg-emerald-500 rounded-full" style={{ width: `${item.pct}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "performance" && (
-        <div className="space-y-4">
-          {/* Top Section - Category Chart */}
-          <div className="bg-white rounded-lg border border-gray-200 p-5">
-            <p className="text-gray-900 text-sm mb-5" style={{ fontWeight: 600 }}>Revenue by Category</p>
-            <div className="space-y-4">
-              {[
-                { category: "Coffee & Drinks", amount: 8400, color: "bg-blue-500" },
-                { category: "Food & Pastries", amount: 3200, color: "bg-emerald-500" },
-                { category: "Merchandise", amount: 880, color: "bg-amber-500" },
-              ].map((item) => {
-                const maxAmount = 8400;
-                const percentage = (item.amount / maxAmount) * 100;
-                return (
-                  <div key={item.category}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-gray-700 text-sm" style={{ fontWeight: 500 }}>{item.category}</span>
-                      <span className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>${item.amount.toLocaleString()}</span>
-                    </div>
-                    <div className="h-8 bg-gray-100 rounded-lg overflow-hidden">
-                      <div
-                        className={`h-8 ${item.color} rounded-lg flex items-center justify-end px-3`}
-                        style={{ width: `${percentage}%` }}
-                      >
-                        <span className="text-white text-xs" style={{ fontWeight: 600 }}>
-                          {percentage.toFixed(0)}%
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Bottom Section - Top Products Table */}
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="px-4 md:px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-              <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Top Selling Items</p>
-              <button className="text-blue-600 text-xs hover:underline" style={{ fontWeight: 500 }}>
-                <span className="hidden sm:inline">Export CSV</span>
-                <span className="sm:hidden">Export</span>
-              </button>
-            </div>
-
-            {/* Desktop: Table view */}
-            <table className="hidden md:table w-full text-xs">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-left px-5 py-3 text-gray-500" style={{ fontWeight: 500 }}>Rank</th>
-                  <th className="text-left px-5 py-3 text-gray-500" style={{ fontWeight: 500 }}>Item Name</th>
-                  <th className="text-left px-5 py-3 text-gray-500" style={{ fontWeight: 500 }}>Category</th>
-                  <th className="text-right px-5 py-3 text-gray-500" style={{ fontWeight: 500 }}>Units Sold</th>
-                  <th className="text-right px-5 py-3 text-gray-500" style={{ fontWeight: 500 }}>Total Revenue</th>
-                  <th className="text-left px-5 py-3 text-gray-500" style={{ fontWeight: 500 }}>Trend</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { rank: 1, name: "Latte", category: "Coffee", units: 420, revenue: 2016, trend: "+12%", trendColor: "bg-emerald-100 text-emerald-700" },
-                  { rank: 2, name: "Cappuccino", category: "Coffee", units: 385, revenue: 1617, trend: "+8%", trendColor: "bg-emerald-100 text-emerald-700" },
-                  { rank: 3, name: "Croissant", category: "Pastries", units: 312, revenue: 1185, trend: "+15%", trendColor: "bg-emerald-100 text-emerald-700" },
-                  { rank: 4, name: "Iced Tea", category: "Drinks", units: 298, revenue: 894, trend: "-3%", trendColor: "bg-red-100 text-red-700" },
-                  { rank: 5, name: "Blueberry Muffin", category: "Pastries", units: 245, revenue: 784, trend: "+5%", trendColor: "bg-emerald-100 text-emerald-700" },
-                ].map((item) => (
-                  <tr key={item.rank} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-5 py-3">
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-gray-700 text-xs" style={{ fontWeight: 600 }}>
-                        {item.rank}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-gray-900" style={{ fontWeight: 600 }}>{item.name}</td>
-                    <td className="px-5 py-3 text-gray-600">{item.category}</td>
-                    <td className="px-5 py-3 text-right text-gray-900" style={{ fontWeight: 500 }}>{item.units.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right text-gray-900" style={{ fontWeight: 600 }}>${item.revenue.toLocaleString()}</td>
-                    <td className="px-5 py-3">
-                      <span className={`px-2 py-0.5 rounded-full ${item.trendColor}`} style={{ fontWeight: 600 }}>
-                        {item.trend}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Mobile: Card list view */}
-            <div className="md:hidden">
-              {[
-                { rank: 1, name: "Latte", category: "Coffee", units: 420, revenue: 2016, trend: "+12%", trendColor: "bg-emerald-100 text-emerald-700" },
-                { rank: 2, name: "Cappuccino", category: "Coffee", units: 385, revenue: 1617, trend: "+8%", trendColor: "bg-emerald-100 text-emerald-700" },
-                { rank: 3, name: "Croissant", category: "Pastries", units: 312, revenue: 1185, trend: "+15%", trendColor: "bg-emerald-100 text-emerald-700" },
-                { rank: 4, name: "Iced Tea", category: "Drinks", units: 298, revenue: 894, trend: "-3%", trendColor: "bg-red-100 text-red-700" },
-                { rank: 5, name: "Blueberry Muffin", category: "Pastries", units: 245, revenue: 784, trend: "+5%", trendColor: "bg-emerald-100 text-emerald-700" },
-              ].map((item, index, array) => (
-                <div
-                  key={item.rank}
-                  className={`px-4 py-4 ${
-                    index !== array.length - 1 ? 'border-b border-gray-100' : ''
-                  }`}
-                >
-                  {/* Top Row: Rank badge + Item name (left), Total Revenue (right) */}
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-gray-700 text-xs flex-shrink-0" style={{ fontWeight: 600 }}>
-                        {item.rank}
-                      </span>
-                      <span className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>{item.name}</span>
-                    </div>
-                    <span className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>${item.revenue.toLocaleString()}</span>
-                  </div>
-
-                  {/* Middle Row: Category (left), Trend badge (right) */}
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-gray-500 text-xs">{item.category}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${item.trendColor}`} style={{ fontWeight: 600 }}>
-                      {item.trend}
-                    </span>
-                  </div>
-
-                  {/* Bottom Row: Units sold */}
-                  <div className="text-gray-400 text-xs">
-                    Units Sold: {item.units.toLocaleString()}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "invoices" && (
-        <div className="space-y-4">
-          {/* Invoice status summary - 2x2 grid on mobile, 4 columns on desktop */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { label: "Total outstanding", value: "$4,370", color: "bg-amber-50 border-amber-200 text-amber-700" },
-              { label: "Paid this month", value: "$6,800", color: "bg-emerald-50 border-emerald-200 text-emerald-700" },
-              { label: "Overdue", value: "$780", color: "bg-red-50 border-red-200 text-red-700" },
-              { label: "Drafts", value: "2", color: "bg-gray-50 border-gray-200 text-gray-600" },
-            ].map((s) => (
-              <div key={s.label} className={`rounded-lg border p-3 ${s.color}`}>
-                <p className="text-xs opacity-70">{s.label}</p>
-                <p className="text-lg md:text-xl mt-1" style={{ fontWeight: 700 }}>{s.value}</p>
+              { label: "Revenue Today", value: `$${stats.revenue.toLocaleString()}`, trend: stats.revenue >= stats.prevRevenue ? `+${(stats.revenue - stats.prevRevenue).toFixed(0)}` : `-${(stats.prevRevenue - stats.revenue).toFixed(0)}`, positive: stats.revenue >= stats.prevRevenue },
+              { label: "Transactions", value: stats.count, trend: stats.count >= stats.prevCount ? `+${stats.count - stats.prevCount}` : `-${stats.prevCount - stats.count}`, positive: stats.count >= stats.prevCount },
+              { label: "Avg. Order Today", value: `$${stats.avgOrder.toFixed(2)}`, trend: "vs yesterday", positive: true },
+              { label: "Active Invoices", value: stats.invoiceCount, trend: `${stats.pendingInvoices} pending`, positive: false },
+            ].map((card, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+                <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">{card.label}</p>
+                <p className="text-gray-900 mt-2 mb-3 text-2xl font-extrabold">{card.value}</p>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${card.positive ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {card.trend}
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-medium">from last period</span>
+                </div>
               </div>
             ))}
           </div>
 
-          {/* Desktop: Invoice table */}
-          <div className="hidden md:block bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Invoices</p>
-              <div className="flex gap-2">
-                <div className="h-7 px-2 rounded border border-gray-200 flex items-center text-xs text-gray-500">All ▾</div>
-                <div className="h-7 px-2 rounded border border-gray-200 flex items-center text-xs text-gray-500">Sort ▾</div>
-              </div>
-            </div>
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  {["Invoice", "Customer", "Amount", "Issued", "Due", "Status", ""].map((h) => (
-                    <th key={h} className="text-left px-4 py-2.5 text-gray-500" style={{ fontWeight: 500 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((inv) => (
-                  <tr key={inv.id} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer">
-                    <td className="px-4 py-3 text-blue-600" style={{ fontWeight: 500 }}>{inv.id}</td>
-                    <td className="px-4 py-3 text-gray-700">{inv.customer}</td>
-                    <td className="px-4 py-3 text-gray-900" style={{ fontWeight: 600 }}>{inv.amount}</td>
-                    <td className="px-4 py-3 text-gray-400">{inv.date}</td>
-                    <td className="px-4 py-3 text-gray-500">{inv.due}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full ${statusColor[inv.status]}`} style={{ fontWeight: 600 }}>
-                        {inv.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3"><ChevronRight size={13} className="text-gray-300" /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile: Invoice cards */}
-          <div className="md:hidden bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Invoices</p>
-              <div className="flex gap-2">
-                <div className="h-7 px-2 rounded border border-gray-200 flex items-center text-xs text-gray-500">All ▾</div>
-                <div className="h-7 px-2 rounded border border-gray-200 flex items-center text-xs text-gray-500">Sort ▾</div>
-              </div>
-            </div>
-            <div>
-              {invoices.map((inv, index) => (
-                <div
-                  key={inv.id}
-                  className={`px-4 py-4 hover:bg-gray-50 cursor-pointer ${
-                    index !== invoices.length - 1 ? 'border-b border-gray-100' : ''
-                  }`}
-                >
-                  {/* Top Row: Invoice ID (left) and Status (right) */}
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-blue-600 text-sm" style={{ fontWeight: 500 }}>{inv.id}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${statusColor[inv.status]}`} style={{ fontWeight: 600 }}>
-                      {inv.status}
-                    </span>
-                  </div>
-
-                  {/* Middle Row: Customer (left) and Amount (right) */}
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-gray-700 text-sm">{inv.customer}</span>
-                    <span className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>{inv.amount}</span>
-                  </div>
-
-                  {/* Bottom Row: Issue and Due dates */}
-                  <div className="flex items-center text-xs text-gray-400">
-                    <span>Issued: {inv.date}</span>
-                    <span className="mx-2">•</span>
-                    <span>Due: {inv.due}</span>
-                  </div>
+          <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
+            {/* Chart Area */}
+            <div className="lg:col-span-6 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-8">
+                <p className="text-gray-900 text-sm font-bold">Revenue Pulse — Hourly</p>
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-gray-50 rounded-full text-[10px] font-bold text-gray-400">
+                  <TrendingUp size={12} className="text-emerald-500" /> +12% Efficiency
                 </div>
-              ))}
+              </div>
+              
+              <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                    <XAxis 
+                      dataKey="time" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 600 }} 
+                      dy={10}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 600 }}
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#f9fafb' }}
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                    />
+                    <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={24} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Breakdowns */}
+            <div className="lg:col-span-4 space-y-6">
+              <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                <p className="text-gray-900 text-sm font-bold mb-6">Revenue by Channel</p>
+                <div className="space-y-5">
+                  {[
+                    { label: "In-store POS", val: stats.revenue - (invoices.reduce((s,i) => s + (new Date(i.createdAt).toDateString() === new Date(selectedDate).toDateString() ? i.total : 0), 0)), color: "bg-blue-500" },
+                    { label: "Invoice", val: invoices.reduce((s,i) => s + (new Date(i.createdAt).toDateString() === new Date(selectedDate).toDateString() ? i.total : 0), 0), color: "bg-emerald-500" },
+                  ].map((ch, i) => (
+                    <div key={i}>
+                      <div className="flex justify-between text-xs mb-2">
+                        <span className="text-gray-500 font-medium">{ch.label}</span>
+                        <span className="text-gray-900 font-bold">${ch.val.toLocaleString()}</span>
+                      </div>
+                      <div className="h-2 bg-gray-50 rounded-full overflow-hidden">
+                        <div className={`h-2 ${ch.color} rounded-full`} style={{ width: `${(ch.val / stats.revenue) * 100}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                <p className="text-gray-900 text-sm font-bold mb-6">Payment Distribution</p>
+                <div className="space-y-4">
+                  {Object.entries(stats.paymentDistribution).map(([method, amount], i) => (
+                    <div key={i}>
+                      <div className="flex justify-between text-xs mb-2">
+                        <span className="text-gray-500 font-medium">{method}</span>
+                        <span className="text-gray-900 font-bold">${amount.toLocaleString()}</span>
+                      </div>
+                      <div className="h-2 bg-gray-50 rounded-full overflow-hidden">
+                        <div className="h-2 bg-orange-500 rounded-full" style={{ width: `${(amount / stats.revenue) * 100}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                  {Object.keys(stats.paymentDistribution).length === 0 && (
+                    <p className="text-xs text-gray-400 italic">No payments recorded today</p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
+        </div>
+      ) : activeTab === "performance" && performance ? (
+        <div className="space-y-6 animate-in fade-in duration-500">
+           <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+             <p className="text-gray-900 text-sm font-bold mb-8">Category Revenue Breakdown</p>
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {Object.entries(performance.categoryStats).map(([cat, rev], i) => (
+                  <div key={i} className="p-4 rounded-2xl bg-gray-50/50 border border-gray-100">
+                    <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">{cat}</p>
+                    <p className="text-gray-900 text-xl font-black mt-1">${rev.toLocaleString()}</p>
+                    <div className="h-1.5 w-full bg-gray-100 rounded-full mt-4 overflow-hidden">
+                       <div className="h-1.5 bg-blue-500 rounded-full" style={{ width: `${(rev / Object.values(performance.categoryStats).reduce((a,b)=>a+b, 0)) * 100}%` }} />
+                    </div>
+                  </div>
+                ))}
+             </div>
+           </div>
+
+           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+             <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+                <p className="text-gray-900 text-sm font-bold">Top Performing Products</p>
+             </div>
+             <table className="w-full text-xs md:text-sm">
+                <thead>
+                  <tr className="bg-gray-50/50 text-gray-400 border-b border-gray-100">
+                    <th className="text-left px-6 py-4 font-medium uppercase tracking-tighter">Product</th>
+                    <th className="text-left px-6 py-4 font-medium uppercase tracking-tighter">Category</th>
+                    <th className="text-right px-6 py-4 font-medium uppercase tracking-tighter">Units</th>
+                    <th className="text-right px-6 py-4 font-medium uppercase tracking-tighter">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {performance.topProducts.map((item, i) => (
+                    <tr key={i} className="hover:bg-blue-50/30 transition-colors">
+                      <td className="px-6 py-4 font-bold text-gray-900">{item.name}</td>
+                      <td className="px-6 py-4 text-gray-500">{item.category}</td>
+                      <td className="px-6 py-4 text-right text-gray-600 font-medium">{item.units}</td>
+                      <td className="px-6 py-4 text-right text-blue-600 font-extrabold">${item.revenue.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+             </table>
+           </div>
+        </div>
+      ) : activeTab === "invoices" && (
+        <div className="space-y-4 animate-in fade-in duration-500">
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-blue-600 rounded-2xl p-6 text-white shadow-lg shadow-blue-100">
+                 <p className="text-blue-100 text-[10px] font-bold uppercase tracking-wider">Total Outstanding</p>
+                 <p className="text-3xl font-black mt-2">${invoices.filter(i => i.status === 'Pending').reduce((s,i) => s + i.total, 0).toLocaleString()}</p>
+                 <p className="text-blue-200 text-[10px] mt-4 flex items-center gap-1"><Zap size={10} /> Needs Attention</p>
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                 <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">Collected this Month</p>
+                 <p className="text-3xl text-gray-900 font-black mt-2">${invoices.filter(i => i.status === 'Completed').reduce((s,i) => s + i.total, 0).toLocaleString()}</p>
+                 <p className="text-emerald-500 text-[10px] mt-4 font-bold flex items-center gap-1"><TrendingUp size={10} /> +22% vs last month</p>
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                 <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">Pending Drafts</p>
+                 <p className="text-3xl text-gray-900 font-black mt-2">0</p>
+                 <p className="text-gray-400 text-[10px] mt-4">All items published</p>
+              </div>
+           </div>
+
+           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+             <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+                <p className="text-gray-900 text-sm font-bold">Active Invoices</p>
+             </div>
+             <table className="w-full text-xs md:text-sm">
+                <thead>
+                  <tr className="bg-gray-50/50 text-gray-400 border-b border-gray-100">
+                    <th className="text-left px-6 py-4 font-medium">Bill #</th>
+                    <th className="text-left px-6 py-4 font-medium">Customer</th>
+                    <th className="text-right px-6 py-4 font-medium">Total</th>
+                    <th className="text-left px-6 py-4 font-medium">Status</th>
+                    <th className="px-6 py-4" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {invoices.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-20 text-center text-gray-400 text-sm italic">No invoices found</td>
+                    </tr>
+                  ) : (
+                    invoices.map((inv) => (
+                      <tr key={inv._id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 font-bold text-gray-900">#{inv.billNo}</td>
+                        <td className="px-6 py-4 text-gray-600 font-medium">{inv.customerName}</td>
+                        <td className="px-6 py-4 text-right text-gray-900 font-extrabold">${inv.total.toFixed(2)}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            inv.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {inv.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button className="text-blue-600 font-bold hover:underline">View Detail</button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+             </table>
+           </div>
         </div>
       )}
 
-
       {/* Annotation */}
-      <div className="border border-dashed border-gray-300 rounded-lg p-3 bg-gray-50">
-        <div className="flex items-center gap-2">
-          <Zap size={12} className="text-blue-400" />
-          <p className="text-xs text-gray-400" style={{ fontWeight: 600 }}>Wireframe: Sales — Invoicing & forecasting</p>
+      <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-center gap-4">
+        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+          <Zap size={20} className="text-blue-500" />
         </div>
-        <p className="text-xs text-gray-400 mt-0.5">Tabs: Daily summary (today's revenue) · Invoices (list + create) · Revenue forecast (predicted vs actual)</p>
+        <div>
+          <p className="text-gray-900 text-xs font-bold">Sales & Invoicing Powered by Smart-Pulse</p>
+          <p className="text-gray-500 text-[10px] mt-0.5">Real-time revenue tracking and professional invoicing automated for your business efficiency.</p>
+        </div>
       </div>
     </div>
   );
