@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { Upload, Star, ThumbsUp, Meh, ThumbsDown, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Upload, Star, ThumbsUp, Meh, ThumbsDown, Loader2, AlertTriangle } from "lucide-react";
 import api from "../lib/api";
+import { getFirstNonEmptyValue, parseCsvText } from "../lib/csv";
 
 interface ReviewItem {
   original_text: string;
@@ -17,6 +18,12 @@ interface ReviewBatch {
   createdAt: string;
 }
 
+interface AnalyzeReviewsResponse {
+  _id: string;
+  predictions: ReviewItem[];
+  summary: any;
+}
+
 const sentimentColors = {
   Positive: "bg-emerald-100 text-emerald-700",
   Neutral: "bg-amber-100 text-amber-700",
@@ -26,21 +33,87 @@ const sentimentColors = {
 export function SentimentAnalysisPage() {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function fetchReviews() {
+    try {
+      const res = await api.get<{ reviews: ReviewBatch[] }>("/api/reviews?limit=10");
+      const allReviews = res.reviews.flatMap((batch) => batch.predictions);
+      setReviews(allReviews);
+    } catch (err) {
+      console.error("Failed to fetch reviews:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function fetchReviews() {
-      try {
-        const res = await api.get<{ reviews: ReviewBatch[] }>("/api/reviews?limit=10");
-        const allReviews = res.reviews.flatMap(batch => batch.predictions);
-        setReviews(allReviews);
-      } catch (err) {
-        console.error("Failed to fetch reviews:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
     fetchReviews();
   }, []);
+
+  function handleUploadClick() {
+    fileInputRef.current?.click();
+  }
+
+  async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadError(null);
+    setIsUploading(true);
+
+    try {
+      const csvText = await file.text();
+      const parsed = parseCsvText(csvText);
+
+      if (parsed.rows.length === 0) {
+        throw new Error("CSV needs at least one review row.");
+      }
+
+      if (parsed.rows.length > 500) {
+        throw new Error("Maximum 500 reviews per upload.");
+      }
+
+      const reviewsPayload = parsed.rows.map((row) => {
+        const reviewBody = getFirstNonEmptyValue(row, ["review_body", "original_text", "review", "text"]);
+        const productCategory = getFirstNonEmptyValue(row, ["product_category", "category", "topic"]);
+
+        if (!reviewBody || !productCategory) {
+          throw new Error("Each row needs review_body and product_category columns.");
+        }
+
+        return {
+          review_body: reviewBody,
+          product_category: productCategory,
+        };
+      });
+
+      const response = await api.post<AnalyzeReviewsResponse>("/api/reviews/analyze", {
+        reviews: reviewsPayload,
+      });
+
+      if (Array.isArray(response.predictions)) {
+        setReviews(response.predictions);
+      } else {
+        await fetchReviews();
+      }
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to analyze reviews CSV";
+      setUploadError(message);
+      console.error("Upload failed:", err);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } finally {
+      setIsUploading(false);
+    }
+  }
 
   const hasData = reviews.length > 0;
 
@@ -91,16 +164,43 @@ export function SentimentAnalysisPage() {
             <label className="text-gray-700 text-xs md:text-sm mb-2 block" style={{ fontWeight: 600 }}>
               Upload Reviews CSV
             </label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 md:p-8 text-center hover:border-violet-400 hover:bg-violet-50/30 transition-all cursor-pointer group">
+            <div
+              className="border-2 border-dashed border-gray-300 rounded-lg p-6 md:p-8 text-center hover:border-violet-400 hover:bg-violet-50/30 transition-all cursor-pointer group"
+              onClick={handleUploadClick}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={handleCsvUpload}
+              />
               <Upload size={32} className="text-gray-400 group-hover:text-violet-500 mx-auto mb-2" />
               <p className="text-gray-700 text-sm mb-1" style={{ fontWeight: 600 }}>
-                Drop CSV file here or click to browse
+                {isUploading ? "Analyzing reviews..." : "Drop CSV file here or click to browse"}
               </p>
-              <p className="text-gray-500 text-xs">Up to 500 records supported</p>
+              <p className="text-gray-500 text-xs">Columns: review_body, product_category</p>
             </div>
+            {uploadError && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex gap-2">
+                <AlertTriangle size={16} className="text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-red-700 text-xs font-medium">{uploadError}</p>
+                  <p className="text-red-600 text-[11px] mt-1">
+                    CSV format required: review_body and product_category columns (at least 1 row, max 500).
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
-          <button className="h-10 md:h-11 px-6 rounded-lg bg-violet-600 text-white text-sm hover:bg-violet-700 transition-colors" style={{ fontWeight: 600 }}>
-            Analyze Reviews
+          <button
+            type="button"
+            onClick={handleUploadClick}
+            disabled={isUploading}
+            className="h-10 md:h-11 px-6 rounded-lg bg-violet-600 text-white text-sm hover:bg-violet-700 disabled:opacity-60 transition-colors"
+            style={{ fontWeight: 600 }}
+          >
+            {isUploading ? "Uploading..." : "Analyze Reviews"}
           </button>
         </div>
       </div>

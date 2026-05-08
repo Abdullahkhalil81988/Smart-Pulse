@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { AlertTriangle, Activity, Upload, Loader2, Inbox } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import api from "../lib/api";
+import { parseCsvText } from "../lib/csv";
 
 /* ─── types ──────────────────────────────────────────────── */
 
@@ -78,6 +79,7 @@ export function DashboardPage() {
   // Forecaster states
   const [forecastData, setForecastData] = useState<MLPredictionResult | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDashboard = useCallback(async () => {
@@ -105,6 +107,31 @@ export function DashboardPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setUploadError(null);
+
+    try {
+      const csvText = await file.text();
+      const parsed = parseCsvText(csvText);
+      const headerSet = new Set(parsed.headers.map((header) => header.toLowerCase()));
+
+      const hasInvoiceDate = headerSet.has("invoicedate");
+      const hasQuantity = headerSet.has("quantity");
+      const hasUnitPrice = headerSet.has("unitprice") || headerSet.has("price");
+
+      if (!hasInvoiceDate || !hasQuantity || !hasUnitPrice) {
+        throw new Error("CSV must include InvoiceDate, Quantity, and UnitPrice columns.");
+      }
+
+      if (parsed.rows.length < 10) {
+        throw new Error("CSV needs at least 10 data rows so the forecast model can build lag features.");
+      }
+    } catch (validationError) {
+      const message = validationError instanceof Error ? validationError.message : "Invalid CSV file";
+      setUploadError(message);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
 
@@ -112,11 +139,13 @@ export function DashboardPage() {
     try {
       const res = await api.upload<MLPredictionResult>("/api/ml/predict?model_type=forecaster", formData);
       setForecastData(res);
+      setUploadError(null);
       // Refresh predictions and stats to show the newly logged prediction
       await fetchDashboard();
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to process CSV. Make sure it has retail schema (InvoiceDate, Quantity, UnitPrice).";
+      setUploadError(errorMsg);
       console.error("Upload failed", err);
-      alert("Failed to process CSV. Make sure it has retail schema (InvoiceDate, Quantity, UnitPrice).");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -268,7 +297,23 @@ export function DashboardPage() {
                 <p className="text-gray-700 text-xs" style={{ fontWeight: 600 }}>
                   {isUploading ? "Processing Model..." : "Drop monthly retail CSV here"}
                 </p>
+                <p className="text-gray-400 text-[11px] mt-1">
+                  Needs InvoiceDate, Quantity, UnitPrice and at least 10 rows.
+                </p>
               </div>
+              
+              {/* Error Message Display */}
+              {uploadError && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex gap-2">
+                  <AlertTriangle size={16} className="text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-red-700 text-xs font-medium">{uploadError}</p>
+                    <p className="text-red-600 text-[11px] mt-1">
+                      CSV format required: InvoiceDate, Quantity, UnitPrice columns with at least 10 rows of data.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Right Card: Revenue Trend */}

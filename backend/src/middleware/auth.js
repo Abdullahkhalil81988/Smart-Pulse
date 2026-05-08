@@ -13,6 +13,7 @@ const User = require('../models/User');
 async function auth(req, res, next) {
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) {
+    console.warn(`[auth] missing bearer token for ${req.method} ${req.originalUrl}`);
     return res.status(401).json({ error: 'No token provided' });
   }
 
@@ -43,7 +44,7 @@ async function auth(req, res, next) {
 
     next();
   } catch (err) {
-    console.error('Firebase auth error:', err.message);
+    console.error(`[auth] firebase verification failed for ${req.method} ${req.originalUrl}: ${err.message}`);
     res.status(401).json({ error: 'Invalid or expired token' });
   }
 }

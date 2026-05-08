@@ -10,6 +10,8 @@ router.post('/analyze', auth, async (req, res) => {
   try {
     const { reviews } = req.body;
 
+    console.log(`[reviews] analyze user=${req.user.id} count=${Array.isArray(reviews) ? reviews.length : 0}`);
+
     if (!Array.isArray(reviews) || reviews.length === 0)
       return res.status(400).json({ error: 'reviews must be a non-empty array' });
 
@@ -30,8 +32,11 @@ router.post('/analyze', auth, async (req, res) => {
       body: JSON.stringify({ reviews }),
     });
 
+    console.log(`[reviews] upstream status=${maasRes.status}`);
+
     if (!maasRes.ok) {
       const err = await maasRes.json().catch(() => ({ detail: 'ReviewRoute API error' }));
+      console.warn(`[reviews] upstream error detail=${JSON.stringify(err)}`);
       return res.status(maasRes.status).json(err);
     }
 
@@ -44,10 +49,13 @@ router.post('/analyze', auth, async (req, res) => {
       summary,
     });
 
+    console.log(`[reviews] saved batch id=${saved._id} predictions=${predictions.length}`);
+
     req.app.get('broadcast')?.({ type: 'review_analysis', review: saved });
 
     res.json({ _id: saved._id, predictions, summary });
   } catch (err) {
+    console.error(`[reviews] analyze failed: ${err.message}`);
     res.status(500).json({ error: err.message });
   }
 });
@@ -56,6 +64,7 @@ router.post('/analyze', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { limit = 20, page = 1 } = req.query;
+    console.log(`[reviews] list user=${req.user.id} limit=${limit} page=${page}`);
     const reviews = await Review.find({ userId: req.user.id })
       .sort({ createdAt: -1 })
       .limit(Number(limit))
@@ -64,6 +73,7 @@ router.get('/', auth, async (req, res) => {
     const total = await Review.countDocuments({ userId: req.user.id });
     res.json({ reviews, total, page: Number(page) });
   } catch (err) {
+    console.error(`[reviews] list failed: ${err.message}`);
     res.status(500).json({ error: err.message });
   }
 });
@@ -71,10 +81,12 @@ router.get('/', auth, async (req, res) => {
 // GET /api/reviews/:id — with ownership check
 router.get('/:id', auth, async (req, res) => {
   try {
+    console.log(`[reviews] detail user=${req.user.id} review_id=${req.params.id}`);
     const review = await Review.findOne({ _id: req.params.id, userId: req.user.id });
     if (!review) return res.status(404).json({ error: 'Review analysis not found' });
     res.json(review);
   } catch (err) {
+    console.error(`[reviews] detail failed: ${err.message}`);
     res.status(500).json({ error: err.message });
   }
 });

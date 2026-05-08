@@ -21,6 +21,20 @@ const wss    = new WebSocketServer({ server });
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
 
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+  const requestLabel = `${req.method} ${req.originalUrl}`;
+
+  console.log(`[api] -> ${requestLabel}`);
+
+  res.on('finish', () => {
+    const durationMs = Date.now() - startedAt;
+    console.log(`[api] <- ${requestLabel} ${res.statusCode} ${durationMs}ms`);
+  });
+
+  next();
+});
+
 // ── WebSocket broadcast helper ──────────────────────────────
 function broadcast(data) {
   const msg = JSON.stringify(data);
@@ -42,10 +56,18 @@ app.use('/api/alerts',      alertRoutes);
 app.use('/api/ml',          mlRoutes);
 app.use('/api/reviews',     reviewRoutes);
 
-app.get('/health', (_req, res) => res.json({ status: 'ok', version: '1.0.0' }));
+app.use((req, res) => {
+  console.warn(`[api] 404 ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ error: 'Not found' });
+});
 
-app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
-app.use((err, _req, res, _next) => res.status(500).json({ error: err.message }));
+app.use((err, req, res, _next) => {
+  console.error(`[api] 500 ${req.method} ${req.originalUrl}: ${err.message}`);
+  if (err.stack) {
+    console.error(err.stack);
+  }
+  res.status(500).json({ error: err.message });
+});
 
 // ── start ───────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
