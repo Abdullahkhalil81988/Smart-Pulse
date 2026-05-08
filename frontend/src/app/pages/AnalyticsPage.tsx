@@ -17,6 +17,7 @@ interface PredictionItem {
   prediction: number;
   confidence: number;
   anomaly_flag: boolean;
+  correct?: boolean | null;
   createdAt: string;
   raw_input?: any;
 }
@@ -64,6 +65,26 @@ export function AnalyticsPage() {
     { key: "performance", label: "Model performance" },
     { key: "log", label: "Prediction log" },
   ] as const;
+
+  const verdictCounts = predictions.reduce(
+    (acc, row) => {
+      const score = Math.round(row.confidence * 100);
+      const verdict = row.anomaly_flag ? "FRAUD" : score >= 60 ? "REVIEW" : "SAFE";
+      acc[verdict] += 1;
+      return acc;
+    },
+    { FRAUD: 0, REVIEW: 0, SAFE: 0 } as Record<"FRAUD" | "REVIEW" | "SAFE", number>
+  );
+
+  const feedbackCounts = predictions.reduce(
+    (acc, row) => {
+      if (row.correct === true) acc.confirmed += 1;
+      else if (row.correct === false) acc.rejected += 1;
+      else acc.pending += 1;
+      return acc;
+    },
+    { confirmed: 0, rejected: 0, pending: 0 }
+  );
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-6xl w-full">
@@ -356,9 +377,9 @@ export function AnalyticsPage() {
           <div className="grid grid-cols-4 gap-3">
             {[
               { label: "Total inferences", value: stats?.total || 0, color: "border-l-violet-400" },
-              { label: "FRAUD verdicts", value: stats?.anomalies || 0, color: "border-l-red-400" },
-              { label: "REVIEW verdicts", value: "12", color: "border-l-amber-400" },
-              { label: "SAFE verdicts", value: "323", color: "border-l-emerald-400" },
+              { label: "FRAUD verdicts", value: verdictCounts.FRAUD, color: "border-l-red-400" },
+              { label: "REVIEW verdicts", value: verdictCounts.REVIEW, color: "border-l-amber-400" },
+              { label: "SAFE verdicts", value: verdictCounts.SAFE, color: "border-l-emerald-400" },
             ].map((s) => (
               <div key={s.label} className={`bg-white rounded-lg border border-gray-200 border-l-4 ${s.color} p-3`}>
                 <p className="text-gray-500 text-xs">{s.label}</p>
@@ -424,9 +445,13 @@ export function AnalyticsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {row.anomaly_flag
-                        ? <span className="text-emerald-600 text-xs" style={{ fontWeight: 500 }}>✓ Confirmed</span>
-                        : <span className="text-gray-400 text-xs">Pending</span>}
+                      {row.correct === true ? (
+                        <span className="text-emerald-600 text-xs" style={{ fontWeight: 500 }}>✓ Confirmed</span>
+                      ) : row.correct === false ? (
+                        <span className="text-red-600 text-xs" style={{ fontWeight: 500 }}>✕ Rejected</span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">Pending</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <button className="text-violet-600 hover:underline text-xs">View details →</button>
@@ -539,13 +564,41 @@ export function AnalyticsPage() {
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   {/* Yes Button */}
-                  <button className="h-12 rounded-lg bg-emerald-600 text-white flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors" style={{ fontWeight: 600 }}>
+                  <button
+                    onClick={async () => {
+                      if (!selectedPrediction?._id) return;
+                      try {
+                        await api.post(`/api/predictions/feedback/${selectedPrediction._id}`, { correct: true });
+                        setPredictions((prev) =>
+                          prev.map((p) => (p._id === selectedPrediction._id ? { ...p, correct: true } : p))
+                        );
+                      } catch (err) {
+                        console.error(err);
+                      }
+                    }}
+                    className="h-12 rounded-lg bg-emerald-600 text-white flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors"
+                    style={{ fontWeight: 600 }}
+                  >
                     <CheckCircle size={18} />
                     Yes (True Positive)
                   </button>
 
                   {/* No Button */}
-                  <button className="h-12 rounded-lg bg-red-600 text-white flex items-center justify-center gap-2 hover:bg-red-700 transition-colors" style={{ fontWeight: 600 }}>
+                  <button
+                    onClick={async () => {
+                      if (!selectedPrediction?._id) return;
+                      try {
+                        await api.post(`/api/predictions/feedback/${selectedPrediction._id}`, { correct: false });
+                        setPredictions((prev) =>
+                          prev.map((p) => (p._id === selectedPrediction._id ? { ...p, correct: false } : p))
+                        );
+                      } catch (err) {
+                        console.error(err);
+                      }
+                    }}
+                    className="h-12 rounded-lg bg-red-600 text-white flex items-center justify-center gap-2 hover:bg-red-700 transition-colors"
+                    style={{ fontWeight: 600 }}
+                  >
                     <X size={18} />
                     No (False Positive)
                   </button>

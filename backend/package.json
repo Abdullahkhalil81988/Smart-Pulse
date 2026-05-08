@@ -4,7 +4,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "cross-env APP_ENV=development ENABLE_DEV_ROUTES=true nodemon src/server.js"
   },
   "license": "ISC",
   "type": "commonjs",
@@ -17,6 +17,7 @@
     "ws": "^8.20.0"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "nodemon": "^3.1.14"
   }
 }

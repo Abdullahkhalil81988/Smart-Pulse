@@ -7,6 +7,7 @@ const Inventory = require('../models/Inventory');
 const Transaction = require('../models/Transaction');
 const Prediction = require('../models/Prediction');
 const Alert = require('../models/Alert');
+const Settings = require('../models/Settings');
 
 function isDevEnabled() {
   const env = (process.env.APP_ENV || process.env.NODE_ENV || '').toLowerCase();
@@ -49,6 +50,13 @@ router.post('/seed', auth, async (req, res) => {
       user.businessId = business[0]._id;
       await user.save({ session });
     }
+
+    // ensure settings exists
+    await Settings.findOneAndUpdate(
+      { businessId: user.businessId },
+      { $setOnInsert: { businessId: user.businessId, updatedByUserId: user._id } },
+      { upsert: true, new: true, session }
+    );
 
     if (wipe) {
       await Promise.all([
@@ -195,6 +203,25 @@ router.post('/seed', auth, async (req, res) => {
       },
     ];
     await Alert.insertMany(alertDocs, { session });
+
+    // create a couple invited staff members (optional)
+    const staffSeeds = [
+      { name: 'Mark Torres', email: `mark.${user._id.toString().slice(-4)}@demo.local`, role: 'Manager' },
+      { name: 'Sam Lee', email: `sam.${user._id.toString().slice(-4)}@demo.local`, role: 'Analyst' },
+    ];
+    for (const s of staffSeeds) {
+      const exists = await User.findOne({ email: s.email }).session(session);
+      if (!exists) {
+        await User.create([{
+          firebaseUid: `invited:${user.businessId.toString()}:${s.email}`,
+          email: s.email,
+          name: s.name,
+          businessId: user.businessId,
+          role: s.role,
+          status: 'Invited',
+        }], { session });
+      }
+    }
 
     await session.commitTransaction();
     res.json({

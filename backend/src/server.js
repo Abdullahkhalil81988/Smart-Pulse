@@ -17,6 +17,8 @@ const posRoutes         = require('./routes/pos');
 const salesRoutes       = require('./routes/sales');
 const customerRoutes    = require('./routes/customers');
 const devRoutes         = require('./routes/dev');
+const settingsRoutes    = require('./routes/settings');
+const staffRoutes       = require('./routes/staff');
 
 const app    = express();
 const server = http.createServer(app);
@@ -64,6 +66,8 @@ app.use('/api/inventory',   inventoryRoutes);
 app.use('/api/pos',         posRoutes);
 app.use('/api/sales',       salesRoutes);
 app.use('/api/customers',   customerRoutes);
+app.use('/api/settings',    settingsRoutes);
+app.use('/api/staff',       staffRoutes);
 
 // dev-only helpers (seed, diagnostics) - guarded inside route file
 app.use('/api/dev',         devRoutes);

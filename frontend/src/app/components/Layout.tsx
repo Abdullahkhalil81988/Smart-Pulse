@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { useIsMobile } from "./ui/use-mobile";
+import { Toaster } from "./ui/sonner";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, color: "text-emerald-400" },
@@ -133,6 +134,7 @@ export function Layout() {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
+      <Toaster richColors position="top-right" />
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex w-56 bg-gray-900 flex-col flex-shrink-0 border-r border-gray-700">
         <SidebarContent />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Settings, Users, Sliders, Building2, Zap, Plus, Trash2, Loader2 } from "lucide-react";
 import { WireframeBox } from "../components/WireframeBox";
 import api from "../lib/api";
@@ -10,30 +10,63 @@ interface BusinessProfile {
   industry: string;
 }
 
-const staffMembers = [
-  { name: "Jane Doe", email: "jane@business.com", role: "Admin", status: "Active" },
-  { name: "Mark Torres", email: "mark@business.com", role: "Manager", status: "Active" },
-  { name: "Priya Nair", email: "priya@business.com", role: "Cashier", status: "Active" },
-  { name: "Sam Lee", email: "sam@business.com", role: "Analyst", status: "Invited" },
-];
+type Role = "Admin" | "Manager" | "Analyst" | "Cashier";
+type MemberStatus = "Active" | "Invited" | "Disabled";
+
+interface StaffMember {
+  _id: string;
+  name: string;
+  email: string;
+  role: Role;
+  status: MemberStatus;
+  createdAt: string;
+}
+
+interface StaffResponse {
+  members: StaffMember[];
+}
+
+interface SettingsConfig {
+  _id: string;
+  fraudThreshold: number;
+  reviewThreshold: number;
+  churnThreshold: number;
+  notificationRules: {
+    alertOnFraudVerdict: boolean;
+    dailyDigestEmail: boolean;
+    slackWebhookOnHighRisk: boolean;
+  };
+  overrideRules: {
+    blockTransactionsOver: number;
+    allowChipMatch: boolean;
+  };
+}
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<"business" | "model" | "staff">("business");
-  const [fraudThreshold, setFraudThreshold] = useState(75);
-  const [reviewThreshold, setReviewThreshold] = useState(40);
-  const [churnThreshold, setChurnThreshold] = useState(75);
+  const [config, setConfig] = useState<SettingsConfig | null>(null);
+  const fraudThreshold = config?.fraudThreshold ?? 75;
+  const reviewThreshold = config?.reviewThreshold ?? 40;
+  const churnThreshold = config?.churnThreshold ?? 75;
 
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
+  const [seedResult, setSeedResult] = useState<string | null>(null);
+
+  const [staffLoading, setStaffLoading] = useState(true);
+  const [members, setMembers] = useState<StaffMember[]>([]);
+  const [savingConfig, setSavingConfig] = useState(false);
 
   useEffect(() => {
     async function fetchBusiness() {
       try {
-        const res = await api.get<BusinessProfile[]>("/api/businesses");
-        if (res.length > 0) {
-          setBusiness(res[0]);
-        }
+        const [bizRes, cfgRes] = await Promise.all([
+          api.get<BusinessProfile[]>("/api/businesses"),
+          api.get<SettingsConfig>("/api/settings"),
+        ]);
+        if (bizRes.length > 0) setBusiness(bizRes[0]);
+        setConfig(cfgRes);
       } catch (err) {
         console.error("Failed to fetch business profile:", err);
       } finally {
@@ -42,6 +75,25 @@ export function SettingsPage() {
     }
     fetchBusiness();
   }, []);
+
+  async function fetchStaff() {
+    try {
+      setStaffLoading(true);
+      const res = await api.get<StaffResponse>("/api/staff");
+      setMembers(Array.isArray(res.members) ? res.members : []);
+    } catch (err) {
+      console.error("Failed to fetch staff:", err);
+      setMembers([]);
+    } finally {
+      setStaffLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === "staff") fetchStaff();
+  }, [activeTab]);
+
+  const me = useMemo(() => members[0] ?? null, [members]);
 
   const tabs = [
     { key: "business", label: "Business profile", icon: Building2 },
@@ -125,18 +177,26 @@ export function SettingsPage() {
                     <div>
                       <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Dev tools</p>
                       <p className="text-gray-400 text-xs mt-0.5">Seed MongoDB with demo inventory + transactions for your user.</p>
+                      {seedResult && (
+                        <p className="text-gray-500 text-xs mt-2">
+                          {seedResult}
+                        </p>
+                      )}
                     </div>
                     <button
                       disabled={seeding}
                       onClick={async () => {
                         try {
                           setSeeding(true);
+                          setSeedResult(null);
                           await api.post("/api/dev/seed", { wipe: true, inventoryItems: 28, transactions: 80, daysBack: 45 });
                           toast.success("Seeded demo data. Refreshing…");
+                          setSeedResult("Seed complete. Reloading…");
                           window.location.reload();
                         } catch (err) {
                           const msg = err instanceof Error ? err.message : "Failed to seed demo data";
                           toast.error(msg);
+                          setSeedResult(`Seed failed: ${msg}`);
                         } finally {
                           setSeeding(false);
                         }
@@ -261,7 +321,7 @@ export function SettingsPage() {
                       <div className="absolute left-0 top-0 h-2 bg-red-400 rounded-full" style={{ width: `${fraudThreshold}%` }} />
                       <input
                         type="range" min={0} max={100} value={fraudThreshold}
-                        onChange={(e) => setFraudThreshold(+e.target.value)}
+                        onChange={(e) => setConfig((prev) => prev ? ({ ...prev, fraudThreshold: +e.target.value }) : prev)}
                         className="absolute inset-0 w-full opacity-0 cursor-pointer h-2"
                       />
                     </div>
@@ -284,7 +344,7 @@ export function SettingsPage() {
                       <div className="absolute left-0 top-0 h-2 bg-amber-400 rounded-full" style={{ width: `${reviewThreshold}%` }} />
                       <input
                         type="range" min={0} max={fraudThreshold - 1} value={reviewThreshold}
-                        onChange={(e) => setReviewThreshold(+e.target.value)}
+                        onChange={(e) => setConfig((prev) => prev ? ({ ...prev, reviewThreshold: +e.target.value }) : prev)}
                         className="absolute inset-0 w-full opacity-0 cursor-pointer h-2"
                       />
                     </div>
@@ -337,7 +397,7 @@ export function SettingsPage() {
                       <div className="absolute left-0 top-0 h-2 bg-red-400 rounded-full" style={{ width: `${churnThreshold}%` }} />
                       <input
                         type="range" min={0} max={100} value={churnThreshold}
-                        onChange={(e) => setChurnThreshold(+e.target.value)}
+                        onChange={(e) => setConfig((prev) => prev ? ({ ...prev, churnThreshold: +e.target.value }) : prev)}
                         className="absolute inset-0 w-full opacity-0 cursor-pointer h-2"
                       />
                     </div>
@@ -457,7 +517,33 @@ export function SettingsPage() {
 
               <div className="flex justify-end gap-2">
                 <button className="px-4 py-2 rounded-md border border-gray-300 text-sm text-gray-600 hover:bg-gray-50">Reset defaults</button>
-                <button className="px-4 py-2 rounded-md bg-gray-900 text-white text-sm hover:bg-gray-700" style={{ fontWeight: 500 }}>Save config</button>
+                <button
+                  onClick={async () => {
+                    try {
+                      if (!config) return;
+                      setSavingConfig(true);
+                      if (!config) return;
+                      const updated = await api.put<SettingsConfig>("/api/settings", {
+                        fraudThreshold: config.fraudThreshold,
+                        reviewThreshold: config.reviewThreshold,
+                        churnThreshold: config.churnThreshold,
+                        notificationRules: config.notificationRules,
+                        overrideRules: config.overrideRules,
+                      });
+                      setConfig(updated);
+                      toast.success("Saved config");
+                    } catch (e2) {
+                      toast.error(e2 instanceof Error ? e2.message : "Failed to save config");
+                    } finally {
+                      setSavingConfig(false);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-md bg-gray-900 text-white text-sm hover:bg-gray-700"
+                  style={{ fontWeight: 500 }}
+                  disabled={savingConfig || !config}
+                >
+                  {savingConfig ? "Saving…" : "Save config"}
+                </button>
               </div>
             </div>
           )}
@@ -467,7 +553,21 @@ export function SettingsPage() {
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                   <p className="text-gray-900 text-xs md:text-sm" style={{ fontWeight: 600 }}>Team members</p>
-                  <button className="h-8 px-3 rounded-md bg-gray-900 text-white flex items-center gap-1.5 text-xs hover:bg-gray-700 whitespace-nowrap" style={{ fontWeight: 500 }}>
+                  <button
+                    onClick={async () => {
+                      const email = prompt("Invite email:");
+                      if (!email) return;
+                      try {
+                        await api.post("/api/staff/invite", { email, role: "Cashier" });
+                        toast.success("Invited");
+                        fetchStaff();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Invite failed");
+                      }
+                    }}
+                    className="h-8 px-3 rounded-md bg-gray-900 text-white flex items-center gap-1.5 text-xs hover:bg-gray-700 whitespace-nowrap"
+                    style={{ fontWeight: 500 }}
+                  >
                     <Plus size={12} /> <span className="hidden sm:inline">Invite member</span><span className="sm:hidden">Invite</span>
                   </button>
                 </div>
@@ -481,7 +581,21 @@ export function SettingsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {staffMembers.map((m, index) => (
+                    {staffLoading ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-10 text-center text-gray-400">
+                          <Loader2 size={20} className="animate-spin mx-auto mb-2" />
+                          Loading staff…
+                        </td>
+                      </tr>
+                    ) : members.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-10 text-center text-gray-400">
+                          No team members.
+                        </td>
+                      </tr>
+                    ) : (
+                    members.map((m, index) => (
                       <tr key={m.email} className="border-b border-gray-50 hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
@@ -491,20 +605,14 @@ export function SettingsPage() {
                               </span>
                             </div>
                             <span className="text-gray-800" style={{ fontWeight: 500 }}>{m.name}</span>
-                            {index === 0 && (
+                            {me && m._id === me._id && (
                               <span className="text-gray-400 text-xs">(You)</span>
                             )}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-gray-500">{m.email}</td>
                         <td className="px-4 py-3">
-                          {index === 0 ? (
-                            <span className="text-gray-700 text-sm">{m.role}</span>
-                          ) : (
-                            <div className="h-6 px-2 rounded border border-gray-200 bg-gray-50 flex items-center text-gray-600 w-fit">
-                              {m.role} ▾
-                            </div>
-                          )}
+                          <span className="text-gray-700 text-sm">{m.role}</span>
                         </td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 rounded-full ${m.status === "Active" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`} style={{ fontWeight: 600 }}>
@@ -512,12 +620,27 @@ export function SettingsPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          {index !== 0 && (
-                            <Trash2 size={13} className="text-gray-300 hover:text-red-400 cursor-pointer" />
+                          {me && m._id !== me._id && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`Remove ${m.name}?`)) return;
+                                try {
+                                  await api.delete(`/api/staff/${m._id}`);
+                                  toast.success("Removed");
+                                  fetchStaff();
+                                } catch (err) {
+                                  toast.error(err instanceof Error ? err.message : "Remove failed");
+                                }
+                              }}
+                              className="text-gray-300 hover:text-red-400"
+                              title="Remove"
+                            >
+                              <Trash2 size={13} />
+                            </button>
                           )}
                         </td>
                       </tr>
-                    ))}
+                    )))}
                   </tbody>
                 </table>
                 </div>
