@@ -13,6 +13,7 @@ const alertRoutes       = require('./routes/alerts');
 const mlRoutes          = require('./routes/ml');
 const reviewRoutes      = require('./routes/reviews');
 const inventoryRoutes   = require('./routes/inventory');
+const posRoutes         = require('./routes/pos');
 
 const app    = express();
 const server = http.createServer(app);
@@ -43,6 +44,7 @@ app.use('/api/alerts',      alertRoutes);
 app.use('/api/ml',          mlRoutes);
 app.use('/api/reviews',     reviewRoutes);
 app.use('/api/inventory',   inventoryRoutes);
+app.use('/api/pos',         posRoutes);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', version: '1.0.0' }));
 
