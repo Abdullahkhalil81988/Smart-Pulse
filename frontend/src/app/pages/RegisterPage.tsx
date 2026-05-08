@@ -25,10 +25,6 @@ export function RegisterPage() {
     setError(null);
     setLoading(true);
     try {
-      // Flag to prevent AuthContext's onAuthStateChanged from auto-syncing
-      // before we've finished setting up the profile.
-      (auth as any)._skipAutoSync = true;
-
       // 1. Create the Firebase user
       const fullName = `${firstName} ${lastName}`.trim();
       const cred = await createUserWithEmailAndPassword(auth, email, password);
@@ -47,12 +43,8 @@ export function RegisterPage() {
       // 5. Tell AuthContext to fetch the user now that we are done manually syncing
       await refreshProfile();
 
-      // 6. Allow future auto-syncs again
-      (auth as any)._skipAutoSync = false;
-
       navigate("/dashboard");
     } catch (err: unknown) {
-      (auth as any)._skipAutoSync = false;
       const msg = err instanceof Error ? err.message : "Registration failed";
       setError(msg.replace("Firebase: ", ""));
     } finally {

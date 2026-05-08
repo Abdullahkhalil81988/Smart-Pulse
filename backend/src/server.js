@@ -12,6 +12,9 @@ const predictionRoutes  = require('./routes/predictions');
 const alertRoutes       = require('./routes/alerts');
 const mlRoutes          = require('./routes/ml');
 const reviewRoutes      = require('./routes/reviews');
+const inventoryRoutes   = require('./routes/inventory');
+const posRoutes         = require('./routes/pos');
+const salesRoutes       = require('./routes/sales');
 
 const app    = express();
 const server = http.createServer(app);
@@ -55,6 +58,9 @@ app.use('/api/predictions', predictionRoutes);
 app.use('/api/alerts',      alertRoutes);
 app.use('/api/ml',          mlRoutes);
 app.use('/api/reviews',     reviewRoutes);
+app.use('/api/inventory',   inventoryRoutes);
+app.use('/api/pos',         posRoutes);
+app.use('/api/sales',       salesRoutes);
 
 app.use((req, res) => {
   console.warn(`[api] 404 ${req.method} ${req.originalUrl}`);
