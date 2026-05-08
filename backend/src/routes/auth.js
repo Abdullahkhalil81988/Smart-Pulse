@@ -13,6 +13,7 @@ router.post('/sync', auth, async (req, res) => {
     const { businessName, industry } = req.body || {};
     let user = await User.findById(req.user.id).populate('businessId');
 
+    let updated = false;
     // If a business name was provided (registration flow) and the user
     // doesn't have one yet, create and link it.
     if (businessName && !user.businessId) {
@@ -21,6 +22,16 @@ router.post('/sync', auth, async (req, res) => {
         industry: industry || 'General',
       });
       user.businessId = business._id;
+      updated = true;
+    }
+
+    // Always ensure the local user name matches the latest Firebase token name
+    if (req.user.name && user.name !== req.user.name) {
+      user.name = req.user.name;
+      updated = true;
+    }
+
+    if (updated) {
       await user.save();
       user = await User.findById(user._id).populate('businessId');
     }

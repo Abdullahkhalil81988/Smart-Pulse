@@ -56,23 +56,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function refreshProfile() {
-    if (!firebaseUser) return;
-    await syncUser(firebaseUser);
+    const fbUser = auth.currentUser || firebaseUser;
+    if (!fbUser) return;
+    await syncUser(fbUser);
   }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
-        // Skip auto-sync when the RegisterPage is handling it manually.
-        // This prevents a race condition where onAuthStateChanged fires
-        // before updateProfile has finished, sending stale data to /sync.
-        if ((auth as any)._skipAutoSync) {
-          // Keep loading=true because RegisterPage is manually syncing
-          // and will soon call refreshProfile()
-          return;
-        }
-        setLoading(true); // <-- ensure loading is true while we hit the backend
+        setLoading(true);
         await syncUser(fbUser);
       } else {
         setUser(null);

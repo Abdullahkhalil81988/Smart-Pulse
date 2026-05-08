@@ -1,11 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Search, Plus, Pencil, Check, X, Trash2, Package,
-  AlertTriangle, ChevronDown, ArrowUpDown, Upload,
+  AlertTriangle, ChevronDown, ArrowUpDown, Upload, Loader2,
 } from "lucide-react";
+import { auth } from "../../firebase-config";
+import Papa from "papaparse";
 
 // ─── Data types ──────────────────────────────────────────────────────────────
 interface InventoryItem {
+  _id?: string;
   code: string;
   name: string;
   category: string;
@@ -14,26 +17,6 @@ interface InventoryItem {
   lowThreshold: number;
   unit: string;
 }
-
-// ─── Initial data ─────────────────────────────────────────────────────────────
-const initialInventory: InventoryItem[] = [
-  { code: "COF-001", name: "Espresso", category: "Coffee", price: 3.50, stock: 45, lowThreshold: 20, unit: "servings" },
-  { code: "COF-002", name: "Latte", category: "Coffee", price: 4.80, stock: 12, lowThreshold: 30, unit: "servings" },
-  { code: "COF-003", name: "Cappuccino", category: "Coffee", price: 4.20, stock: 0, lowThreshold: 15, unit: "servings" },
-  { code: "COF-004", name: "Flat White", category: "Coffee", price: 4.50, stock: 30, lowThreshold: 15, unit: "servings" },
-  { code: "COF-005", name: "Cold Brew", category: "Coffee", price: 5.00, stock: 22, lowThreshold: 10, unit: "servings" },
-  { code: "COF-006", name: "Almond Milk Latte", category: "Coffee", price: 5.80, stock: 20, lowThreshold: 10, unit: "servings" },
-  { code: "FOD-001", name: "Blueberry Muffin", category: "Food", price: 3.20, stock: 18, lowThreshold: 10, unit: "pcs" },
-  { code: "FOD-002", name: "Croissant", category: "Food", price: 3.80, stock: 12, lowThreshold: 10, unit: "pcs" },
-  { code: "FOD-003", name: "Bagel", category: "Food", price: 2.90, stock: 25, lowThreshold: 10, unit: "pcs" },
-  { code: "FOD-004", name: "Danish", category: "Food", price: 3.50, stock: 5, lowThreshold: 8, unit: "pcs" },
-  { code: "DRK-001", name: "Iced Tea", category: "Drinks", price: 3.00, stock: 60, lowThreshold: 15, unit: "bottles" },
-  { code: "DRK-002", name: "Fresh Juice", category: "Drinks", price: 4.50, stock: 15, lowThreshold: 12, unit: "bottles" },
-  { code: "DRK-003", name: "Smoothie", category: "Drinks", price: 5.50, stock: 10, lowThreshold: 8, unit: "cups" },
-  { code: "SNK-001", name: "Granola Bar", category: "Snacks", price: 2.50, stock: 40, lowThreshold: 15, unit: "pcs" },
-  { code: "SNK-002", name: "Chips", category: "Snacks", price: 1.80, stock: 55, lowThreshold: 20, unit: "bags" },
-  { code: "SNK-003", name: "Chocolate", category: "Snacks", price: 2.20, stock: 30, lowThreshold: 15, unit: "bars" },
-];
 
 const CATEGORIES = ["All", "Coffee", "Food", "Drinks", "Snacks"];
 const STATUS_FILTERS = ["All", "In Stock", "Low Stock", "Out of Stock"];
@@ -71,22 +54,67 @@ const emptyNewItem: Omit<InventoryItem, "code"> & { code: string } = {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export function InventoryPage() {
-  const [inventory, setInventory] = useState<InventoryItem[]>(initialInventory);
-  const [editingCode, setEditingCode] = useState<string | null>(null);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<InventoryItem | null>(null);
+  
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+  
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRestockModal, setShowRestockModal] = useState(false);
+  
   const [newItem, setNewItem] = useState({ ...emptyNewItem });
   const [addError, setAddError] = useState("");
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  
   const [restockItemCode, setRestockItemCode] = useState("");
   const [restockAmount, setRestockAmount] = useState<number>(0);
   const [restockError, setRestockError] = useState("");
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set([initialInventory[1].code, initialInventory[2].code]));
+  
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [bulkRestockAmounts, setBulkRestockAmounts] = useState<Record<string, number>>({});
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
+
+  // ── Fetch Data ──────────────────────────────────────────────────────────────
+  const fetchInventory = async () => {
+    try {
+      setIsLoading(true);
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+
+      const res = await fetch(`${API_URL}/api/inventory`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error("Failed to fetch inventory");
+      const data = await res.json();
+      setInventory(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // Only fetch if user is logged in
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        fetchInventory();
+      } else {
+        setInventory([]);
+        setIsLoading(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const lowCount = inventory.filter((i) => stockStatus(i) === "Low Stock").length;
@@ -107,94 +135,293 @@ export function InventoryPage() {
 
   // ── Edit helpers ────────────────────────────────────────────────────────────
   const startEdit = (item: InventoryItem) => {
-    setEditingCode(item.code);
+    setEditingId(item._id!);
     setEditDraft({ ...item });
   };
 
-  const saveEdit = () => {
-    if (!editDraft) return;
-    setInventory((prev) => prev.map((i) => (i.code === editDraft.code ? editDraft : i)));
-    setEditingCode(null);
-    setEditDraft(null);
-    flash(`${editDraft.name} updated`);
+  const saveEdit = async () => {
+    if (!editDraft || !editDraft._id) return;
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`${API_URL}/api/inventory/${editDraft._id}`, {
+        method: "PUT",
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify(editDraft)
+      });
+
+      if (!res.ok) throw new Error("Failed to update item");
+      const updatedItem = await res.json();
+
+      setInventory((prev) => prev.map((i) => (i._id === updatedItem._id ? updatedItem : i)));
+      setEditingId(null);
+      setEditDraft(null);
+      flash(`${editDraft.name} updated`);
+    } catch (err: any) {
+      console.error(err);
+      flash("Failed to update item");
+    }
   };
 
   const cancelEdit = () => {
-    setEditingCode(null);
+    setEditingId(null);
     setEditDraft(null);
   };
 
-  const deleteItem = (code: string) => {
+  const deleteItem = async (code: string) => {
     const item = inventory.find((i) => i.code === code);
-    setInventory((prev) => prev.filter((i) => i.code !== code));
-    if (item) flash(`${item.name} removed`);
+    if (!item || !item._id) return;
+
+    if (!confirm(`Are you sure you want to delete ${item.name}?`)) return;
+
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`${API_URL}/api/inventory/${item._id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) throw new Error("Failed to delete item");
+
+      setInventory((prev) => prev.filter((i) => i._id !== item._id));
+      flash(`${item.name} removed`);
+      
+      // Cleanup selection if deleted
+      setSelectedItems(prev => {
+        const next = new Set(prev);
+        next.delete(code);
+        return next;
+      });
+    } catch (err: any) {
+      console.error(err);
+      flash("Failed to delete item");
+    }
   };
 
   // ── Restock helpers ──────────────────────────────────────────────────────
-  const handleRestock = () => {
-    // Check if we're doing bulk restock (selectedItems) or single restock
-    if (selectedItems.size > 0) {
-      // Bulk restock
-      let restockedCount = 0;
+  const handleRestock = async () => {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+
+      if (selectedItems.size > 0) {
+        // Bulk restock
+        const updates = Array.from(selectedItems)
+          .map(code => ({ code, amount: bulkRestockAmounts[code] || 0 }))
+          .filter(update => update.amount > 0);
+
+        if (updates.length === 0) {
+          setRestockError("Enter at least one valid amount");
+          return;
+        }
+
+        const res = await fetch(`${API_URL}/api/inventory/bulk-restock`, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}` 
+          },
+          body: JSON.stringify({ updates })
+        });
+
+        if (!res.ok) throw new Error("Failed to bulk restock");
+        const updatedItems = await res.json();
+
+        setInventory((prev) => 
+          prev.map((item) => {
+            const updated = updatedItems.find((u: any) => u.code === item.code);
+            return updated ? updated : item;
+          })
+        );
+        
+        flash(`Restocked ${updatedItems.length} item${updatedItems.length !== 1 ? "s" : ""}`);
+        setShowRestockModal(false);
+        setBulkRestockAmounts({});
+        setSelectedItems(new Set());
+        setRestockError("");
+      } else {
+        // Single restock (legacy)
+        if (!restockItemCode) {
+          setRestockError("Please select an item");
+          return;
+        }
+        if (!restockAmount || restockAmount <= 0) {
+          setRestockError("Please enter a valid quantity");
+          return;
+        }
+
+        const updates = [{ code: restockItemCode, amount: restockAmount }];
+        const res = await fetch(`${API_URL}/api/inventory/bulk-restock`, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}` 
+          },
+          body: JSON.stringify({ updates })
+        });
+
+        if (!res.ok) throw new Error("Failed to restock item");
+        const updatedItems = await res.json();
+
+        if (updatedItems.length > 0) {
+           setInventory((prev) => 
+            prev.map((item) => item.code === updatedItems[0].code ? updatedItems[0] : item)
+          );
+          flash(`Added ${restockAmount} to ${updatedItems[0].name}`);
+        }
+        
+        setShowRestockModal(false);
+        setRestockItemCode("");
+        setRestockAmount(0);
+        setRestockError("");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setRestockError(err.message || "Failed to restock");
+    }
+  };
+
+  const handleMarkOutOfStock = async () => {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+
+      const itemsToUpdate = inventory.filter(item => selectedItems.has(item.code));
+      
+      const promises = itemsToUpdate.map(item => 
+        fetch(`${API_URL}/api/inventory/${item._id}`, {
+          method: "PUT",
+          headers: { 
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}` 
+          },
+          body: JSON.stringify({ ...item, stock: 0 })
+        }).then(r => r.json())
+      );
+
+      const updatedItems = await Promise.all(promises);
+
       setInventory((prev) =>
         prev.map((item) => {
-          if (selectedItems.has(item.code)) {
-            const amount = bulkRestockAmounts[item.code] || 0;
-            if (amount > 0) {
-              restockedCount++;
-              return { ...item, stock: item.stock + amount };
-            }
-          }
-          return item;
+          const updated = updatedItems.find((u: any) => u.code === item.code);
+          return updated ? updated : item;
         })
       );
-      if (restockedCount > 0) {
-        flash(`Restocked ${restockedCount} item${restockedCount !== 1 ? "s" : ""}`);
-      }
-      setShowRestockModal(false);
-      setBulkRestockAmounts({});
+      
+      flash(`Marked ${selectedItems.size} item${selectedItems.size !== 1 ? "s" : ""} as out of stock`);
       setSelectedItems(new Set());
-      setRestockError("");
-    } else {
-      // Single restock (legacy)
-      if (!restockItemCode) {
-        setRestockError("Please select an item");
-        return;
-      }
-      if (!restockAmount || restockAmount <= 0) {
-        setRestockError("Please enter a valid quantity");
-        return;
-      }
-      setInventory((prev) =>
-        prev.map((i) =>
-          i.code === restockItemCode ? { ...i, stock: i.stock + restockAmount } : i
-        )
-      );
-      const item = inventory.find((i) => i.code === restockItemCode);
-      if (item) flash(`Added ${restockAmount} ${item.unit} to ${item.name}`);
-      setShowRestockModal(false);
-      setRestockItemCode("");
-      setRestockAmount(0);
-      setRestockError("");
+    } catch (err) {
+      console.error(err);
+      flash("Failed to mark items out of stock");
     }
   };
 
   // ── Add new item ────────────────────────────────────────────────────────────
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (!newItem.code.trim()) { setAddError("Item code is required"); return; }
     if (!newItem.name.trim()) { setAddError("Name is required"); return; }
     if (inventory.find((i) => i.code.toUpperCase() === newItem.code.toUpperCase())) {
       setAddError("Item code already exists");
       return;
     }
-    setInventory((prev) => [
-      { ...newItem, code: newItem.code.toUpperCase() },
-      ...prev,
-    ]);
-    flash(`${newItem.name} added to inventory`);
-    setNewItem({ ...emptyNewItem });
-    setShowAddModal(false);
-    setAddError("");
+
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const payload = { ...newItem, code: newItem.code.toUpperCase() };
+
+      const res = await fetch(`${API_URL}/api/inventory`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to add item");
+      }
+
+      const addedItem = await res.json();
+      
+      setInventory((prev) => [addedItem, ...prev]);
+      flash(`${addedItem.name} added to inventory`);
+      setNewItem({ ...emptyNewItem });
+      setShowAddModal(false);
+      setAddError("");
+    } catch (err: any) {
+      console.error(err);
+      setAddError(err.message || "Failed to add item");
+    }
+  };
+
+  // ── CSV Upload ─────────────────────────────────────────────────────────────
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        try {
+          setIsLoading(true);
+          const token = await auth.currentUser?.getIdToken();
+          
+          // Map CSV rows to InventoryItem structure
+          const items = results.data.map((row: any) => ({
+            code: row.code || row.Code || "",
+            name: row.name || row.Name || "",
+            category: row.category || row.Category || "Uncategorized",
+            price: parseFloat(row.price || row.Price) || 0,
+            stock: parseInt(row.stock || row.Stock || row.Qty) || 0,
+            lowThreshold: parseInt(row.lowThreshold || row["Low Threshold"] || row.MinLevel) || 10,
+            unit: row.unit || row.Unit || "pcs",
+          })).filter((item) => item.code && item.name);
+
+          if (items.length === 0) {
+            flash("No valid items found in CSV");
+            setIsLoading(false);
+            return;
+          }
+
+          const res = await fetch(`${API_URL}/api/inventory/bulk-import`, {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}` 
+            },
+            body: JSON.stringify({ items })
+          });
+
+          if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.message || errorData.error || "Failed to import CSV");
+          }
+
+          const responseData = await res.json();
+          flash(responseData.message || "CSV Imported Successfully");
+          
+          // Refresh list
+          fetchInventory();
+        } catch (err: any) {
+          console.error(err);
+          flash(err.message || "Error importing CSV");
+          setIsLoading(false);
+        }
+      },
+      error: (err) => {
+        console.error(err);
+        flash("Failed to parse CSV file");
+      }
+    });
+    
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   // ── Flash message ────────────────────────────────────────────────────────
@@ -227,6 +454,34 @@ export function InventoryPage() {
   const allSelected = filtered.length > 0 && selectedItems.size === filtered.length;
   const someSelected = selectedItems.size > 0 && selectedItems.size < filtered.length;
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <p className="text-gray-500 text-sm">Loading inventory...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 md:p-6 text-center">
+        <div className="inline-block p-4 rounded-lg bg-red-50 text-red-600 border border-red-200">
+          <AlertTriangle className="mx-auto mb-2" />
+          <p>{error}</p>
+          <button 
+            onClick={fetchInventory}
+            className="mt-4 px-4 py-2 bg-white text-gray-700 rounded border hover:bg-gray-50 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-6xl w-full">
@@ -257,10 +512,18 @@ export function InventoryPage() {
             </span>
           )}
           <button
-            className="h-8 px-3 rounded-md border border-gray-300 bg-white flex items-center gap-1.5 text-sm text-gray-600 hover:bg-gray-50"
+            onClick={() => fileInputRef.current?.click()}
+            className="h-8 px-3 rounded-md border border-gray-300 bg-white flex items-center gap-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
           >
             <Upload size={13} /> Import CSV
           </button>
+          <input 
+            type="file" 
+            accept=".csv" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+            className="hidden" 
+          />
           <button
             onClick={() => { setShowRestockModal(true); setRestockError(""); setRestockItemCode(""); setRestockAmount(0); }}
             className="h-8 px-3 rounded-md border border-gray-300 bg-white flex items-center gap-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
@@ -388,12 +651,12 @@ export function InventoryPage() {
               </tr>
             ) : (
               filtered.map((item) => {
-                const isEditing = editingCode === item.code;
+                const isEditing = editingId === item._id;
                 const status = stockStatus(item);
                 const isSelected = selectedItems.has(item.code);
                 return (
                   <tr
-                    key={item.code}
+                    key={item._id || item.code}
                     className={`border-b border-gray-50 transition-colors ${
                       isEditing ? "bg-orange-50" : isSelected ? "bg-blue-50" : "hover:bg-gray-50"
                     }`}
@@ -866,16 +1129,7 @@ export function InventoryPage() {
                 <Package size={14} /> Restock
               </button>
               <button
-                onClick={() => {
-                  // Mark selected items as out of stock
-                  setInventory((prev) =>
-                    prev.map((item) =>
-                      selectedItems.has(item.code) ? { ...item, stock: 0 } : item
-                    )
-                  );
-                  flash(`Marked ${selectedItems.size} item${selectedItems.size !== 1 ? "s" : ""} as out of stock`);
-                  setSelectedItems(new Set());
-                }}
+                onClick={handleMarkOutOfStock}
                 className="h-9 px-4 rounded-lg bg-white hover:bg-gray-100 text-gray-900 border border-gray-300 text-sm transition-colors flex items-center gap-1.5"
                 style={{ fontWeight: 500 }}
               >
@@ -884,7 +1138,6 @@ export function InventoryPage() {
               <button
                 onClick={() => {
                   selectedItems.forEach((code) => deleteItem(code));
-                  setSelectedItems(new Set());
                 }}
                 className="w-9 h-9 rounded-lg hover:bg-red-600/20 text-red-400 hover:text-red-300 transition-colors flex items-center justify-center"
                 title="Delete selected items"
