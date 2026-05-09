@@ -26,4 +26,22 @@ firebase-service-account.json
 =======
 .env
 *.env
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
+.env.local
+*.env.local
+
+# Build output
+dist/
+frontend/dist/
+
+# Secrets
+firebase-service-account.json
+backend/firebase-service-account.json
+
+# Vite
+.vite/
+.npm/
+.pnpm-store/
+.turbo/
+.next/
+.cache/
+.parcel-cache/
