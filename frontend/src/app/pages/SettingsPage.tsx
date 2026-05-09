@@ -612,9 +612,6 @@ export function SettingsPage() {
                         </td>
                         <td className="px-4 py-3 text-gray-500">{m.email}</td>
                         <td className="px-4 py-3">
-<<<<<<< HEAD
-                          <span className="text-gray-700 text-sm">{m.role}</span>
-=======
                           {me && m._id !== me._id ? (
                             <select
                               value={m.role}
@@ -634,7 +631,6 @@ export function SettingsPage() {
                           ) : (
                             <span className="text-gray-700 text-sm">{m.role}</span>
                           )}
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
                         </td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 rounded-full ${m.status === "Active" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`} style={{ fontWeight: 600 }}>

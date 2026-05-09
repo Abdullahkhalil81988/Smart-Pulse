@@ -39,13 +39,8 @@ async function request<T = unknown>(
 
   if (!res.ok) {
     const message =
-<<<<<<< HEAD
-      typeof data === "object" && data !== null && "error" in data
-        ? (data as { error: string }).error
-=======
       typeof data === "object" && data !== null
         ? (data as any).error || (data as any).detail || JSON.stringify(data)
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
         : String(data);
     throw new Error(message);
   }
