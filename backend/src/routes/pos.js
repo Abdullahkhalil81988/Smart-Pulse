@@ -98,7 +98,7 @@ router.post('/checkout', auth, async (req, res) => {
 // List transactions with search filters
 router.get('/transactions', auth, async (req, res) => {
   try {
-    const { search, date } = req.query;
+    const { search, date, paymentMethod } = req.query;
     let query = { userId: req.user.id };
 
     if (search) {
@@ -106,6 +106,10 @@ router.get('/transactions', auth, async (req, res) => {
         { billNo: { $regex: search, $options: 'i' } },
         { customerName: { $regex: search, $options: 'i' } }
       ];
+    }
+
+    if (paymentMethod) {
+      query.paymentMethod = paymentMethod;
     }
 
     if (date) {
