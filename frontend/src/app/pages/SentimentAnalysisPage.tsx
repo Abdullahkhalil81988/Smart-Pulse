@@ -4,9 +4,9 @@ import api from "../lib/api";
 import { getFirstNonEmptyValue, parseCsvText } from "../lib/csv";
 
 interface ReviewItem {
-  original_text: string;
-  category: string;
-  ai_rating: number;
+  original_text?: string;
+  category?: string;
+  predicted_stars: number;
   sentiment: string;
   confidence: number;
 }
@@ -25,9 +25,9 @@ interface AnalyzeReviewsResponse {
 }
 
 const sentimentColors = {
-  Positive: "bg-emerald-100 text-emerald-700",
-  Neutral: "bg-amber-100 text-amber-700",
-  Negative: "bg-red-100 text-red-700",
+  positive: "bg-emerald-100 text-emerald-700",
+  neutral: "bg-amber-100 text-amber-700",
+  negative: "bg-red-100 text-red-700",
 };
 
 export function SentimentAnalysisPage() {
@@ -131,11 +131,11 @@ export function SentimentAnalysisPage() {
   const hasData = reviews.length > 0;
 
   // Calculate summary stats
-  const avgRating = hasData ? (reviews.reduce((sum, r) => sum + r.ai_rating, 0) / reviews.length).toFixed(1) : "0.0";
+  const avgRating = hasData ? (reviews.reduce((sum, r) => sum + (r.predicted_stars || 0), 0) / reviews.length).toFixed(1) : "0.0";
   const totalProcessed = reviews.length;
-  const positiveCount = reviews.filter((r) => r.sentiment === "Positive").length;
-  const neutralCount = reviews.filter((r) => r.sentiment === "Neutral").length;
-  const negativeCount = reviews.filter((r) => r.sentiment === "Negative").length;
+  const positiveCount = reviews.filter((r) => r.sentiment?.toLowerCase() === "positive").length;
+  const neutralCount = reviews.filter((r) => r.sentiment?.toLowerCase() === "neutral").length;
+  const negativeCount = reviews.filter((r) => r.sentiment?.toLowerCase() === "negative").length;
   const positivePercent = totalProcessed ? Math.round((positiveCount / totalProcessed) * 100) : 0;
   const neutralPercent = totalProcessed ? Math.round((neutralCount / totalProcessed) * 100) : 0;
   const negativePercent = totalProcessed ? Math.round((negativeCount / totalProcessed) * 100) : 0;
@@ -314,13 +314,13 @@ export function SentimentAnalysisPage() {
               <tbody>
                 {reviews.map((review, index) => (
                   <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-700 max-w-xs">{review.original_text}</td>
-                    <td className="px-4 py-3 text-gray-600">{review.category}</td>
+                    <td className="px-4 py-3 text-gray-700 max-w-xs">{review.original_text || "N/A"}</td>
+                    <td className="px-4 py-3 text-gray-600">{review.category || "N/A"}</td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-0.5">{renderStars(review.ai_rating)}</div>
+                      <div className="flex gap-0.5">{renderStars(review.predicted_stars || 0)}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs ${sentimentColors[review.sentiment as keyof typeof sentimentColors]}`} style={{ fontWeight: 600 }}>
+                      <span className={`px-2 py-1 rounded-full text-xs ${sentimentColors[review.sentiment?.toLowerCase() as keyof typeof sentimentColors] || 'bg-gray-100 text-gray-700'}`} style={{ fontWeight: 600 }}>
                         {review.sentiment}
                       </span>
                     </td>
@@ -341,18 +341,18 @@ export function SentimentAnalysisPage() {
               <div key={index} className="px-4 py-4 border-b border-gray-100 last:border-0">
                 {/* Top Row: Category + Sentiment Badge */}
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-gray-500 text-xs">{review.category}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs ${sentimentColors[review.sentiment as keyof typeof sentimentColors]}`} style={{ fontWeight: 600 }}>
+                  <span className="text-gray-500 text-xs">{review.category || "N/A"}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${sentimentColors[review.sentiment?.toLowerCase() as keyof typeof sentimentColors] || 'bg-gray-100 text-gray-700'}`} style={{ fontWeight: 600 }}>
                     {review.sentiment}
                   </span>
                 </div>
 
                 {/* Middle Row: Review Snippet */}
-                <p className="text-gray-700 text-xs mb-3 leading-relaxed">{review.original_text}</p>
+                <p className="text-gray-700 text-xs mb-3 leading-relaxed">{review.original_text || "N/A"}</p>
 
                 {/* Bottom Row: Stars + Confidence */}
                 <div className="flex items-center justify-between">
-                  <div className="flex gap-0.5">{renderStars(review.ai_rating)}</div>
+                  <div className="flex gap-0.5">{renderStars(review.predicted_stars || 0)}</div>
                   <span className="text-violet-600 text-xs" style={{ fontWeight: 600 }}>
                     Confidence: {Math.round(review.confidence * 100)}%
                   </span>

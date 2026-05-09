@@ -70,10 +70,16 @@ router.post('/analyze', auth, async (req, res) => {
 
     const { predictions, summary } = await maasRes.json();
 
+    const enrichedPredictions = predictions.map((pred, idx) => ({
+      ...pred,
+      original_text: reviews[idx].review_body,
+      category: reviews[idx].product_category,
+    }));
+
     const saved = await Review.create({
       userId:        req.user.id,
       reviews_sent:  reviews.length,
-      predictions,
+      predictions: enrichedPredictions,
       summary,
     });
 
