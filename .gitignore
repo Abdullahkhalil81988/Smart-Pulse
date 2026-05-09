@@ -10,3 +10,22 @@ temp_env/
 node_modules/
 .env
 *.env
+.env.local
+*.env.local
+
+# Build output
+dist/
+frontend/dist/
+
+# Secrets
+firebase-service-account.json
+backend/firebase-service-account.json
+
+# Vite
+.vite/
+.npm/
+.pnpm-store/
+.turbo/
+.next/
+.cache/
+.parcel-cache/
