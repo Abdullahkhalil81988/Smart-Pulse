@@ -4,20 +4,20 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "cross-env APP_ENV=development ENABLE_DEV_ROUTES=true nodemon src/server.js"
   },
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3",
+    "firebase-admin": "^13.8.0",
     "mongoose": "^9.6.1",
     "ws": "^8.20.0"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "nodemon": "^3.1.14"
   }
 }

@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('./firebase-config'); // initialise Firebase Admin SDK early
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
@@ -11,6 +12,13 @@ const predictionRoutes  = require('./routes/predictions');
 const alertRoutes       = require('./routes/alerts');
 const mlRoutes          = require('./routes/ml');
 const reviewRoutes      = require('./routes/reviews');
+const inventoryRoutes   = require('./routes/inventory');
+const posRoutes         = require('./routes/pos');
+const salesRoutes       = require('./routes/sales');
+const customerRoutes    = require('./routes/customers');
+const devRoutes         = require('./routes/dev');
+const settingsRoutes    = require('./routes/settings');
+const staffRoutes       = require('./routes/staff');
 
 const app    = express();
 const server = http.createServer(app);
@@ -19,6 +27,20 @@ const wss    = new WebSocketServer({ server });
 // ── middleware ──────────────────────────────────────────────
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
+
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+  const requestLabel = `${req.method} ${req.originalUrl}`;
+
+  console.log(`[api] -> ${requestLabel}`);
+
+  res.on('finish', () => {
+    const durationMs = Date.now() - startedAt;
+    console.log(`[api] <- ${requestLabel} ${res.statusCode} ${durationMs}ms`);
+  });
+
+  next();
+});
 
 // ── WebSocket broadcast helper ──────────────────────────────
 function broadcast(data) {
@@ -40,14 +62,31 @@ app.use('/api/predictions', predictionRoutes);
 app.use('/api/alerts',      alertRoutes);
 app.use('/api/ml',          mlRoutes);
 app.use('/api/reviews',     reviewRoutes);
+app.use('/api/inventory',   inventoryRoutes);
+app.use('/api/pos',         posRoutes);
+app.use('/api/sales',       salesRoutes);
+app.use('/api/customers',   customerRoutes);
+app.use('/api/settings',    settingsRoutes);
+app.use('/api/staff',       staffRoutes);
 
-app.get('/health', (_req, res) => res.json({ status: 'ok', version: '1.0.0' }));
+// dev-only helpers (seed, diagnostics) - guarded inside route file
+app.use('/api/dev',         devRoutes);
 
-app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
-app.use((err, _req, res, _next) => res.status(500).json({ error: err.message }));
+app.use((req, res) => {
+  console.warn(`[api] 404 ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ error: 'Not found' });
+});
+
+app.use((err, req, res, _next) => {
+  console.error(`[api] 500 ${req.method} ${req.originalUrl}: ${err.message}`);
+  if (err.stack) {
+    console.error(err.stack);
+  }
+  res.status(500).json({ error: err.message });
+});
 
 // ── start ───────────────────────────────────────────────────
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 connectDB()
   .then(() => server.listen(PORT, () => console.log(`Server running on port ${PORT}`)))
