@@ -1,9 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-<<<<<<< HEAD
-import { AlertTriangle, Activity, Upload, Loader2, Inbox } from "lucide-react";
-=======
 import { AlertTriangle, Activity, Upload, Loader2, Inbox, Users, ShieldAlert, X } from "lucide-react";
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import api from "../lib/api";
 import { parseCsvText } from "../lib/csv";
@@ -86,8 +82,6 @@ export function DashboardPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-<<<<<<< HEAD
-=======
   const [churnResult, setChurnResult] = useState<{ prediction: number; confidence: number; model_name: string; cluster_label?: number | null } | null>(null);
   const [churnUploading, setChurnUploading] = useState(false);
   const [churnError, setChurnError] = useState<string | null>(null);
@@ -98,7 +92,6 @@ export function DashboardPage() {
   const [fraudError, setFraudError] = useState<string | null>(null);
   const fraudRef = useRef<HTMLInputElement>(null);
 
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
   const fetchDashboard = useCallback(async () => {
     try {
       const [statsRes, alertsRes, predsRes] = await Promise.all([
@@ -169,8 +162,6 @@ export function DashboardPage() {
     }
   }
 
-<<<<<<< HEAD
-=======
   async function handleChurnUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -195,7 +186,6 @@ export function DashboardPage() {
     finally { setFraudUploading(false); if (fraudRef.current) fraudRef.current.value = ""; }
   }
 
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px]">
@@ -458,11 +448,6 @@ export function DashboardPage() {
         <div className="lg:col-span-3">
           <div className="lg:sticky lg:top-6">
             <div className="bg-white rounded-lg border border-gray-200 p-4">
-<<<<<<< HEAD
-              <div className="flex items-center gap-2 mb-3">
-                <AlertTriangle size={14} className="text-amber-500" />
-                <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Active alerts</p>
-=======
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <AlertTriangle size={14} className="text-amber-500" />
@@ -479,7 +464,6 @@ export function DashboardPage() {
                     Clear all
                   </button>
                 )}
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
               </div>
 
               {alerts.length === 0 ? (
@@ -491,13 +475,6 @@ export function DashboardPage() {
               ) : (
                 <div className="space-y-2.5">
                   {alerts.map((a) => (
-<<<<<<< HEAD
-                    <div key={a._id} className={`rounded-md border p-3 ${severityStyle(a.severity)}`}>
-                      <span className="text-xs px-2 py-0.5 rounded bg-white/60 inline-block mb-1.5" style={{ fontWeight: 700 }}>
-                        {a.severity.toUpperCase()}
-                      </span>
-                      <p className="text-xs" style={{ fontWeight: 600 }}>{a.message}</p>
-=======
                     <div key={a._id} className={`rounded-md border p-3 ${severityStyle(a.severity)} relative`}>
                       <button
                         onClick={async () => {
@@ -513,7 +490,6 @@ export function DashboardPage() {
                         {a.severity.toUpperCase()}
                       </span>
                       <p className="text-xs pr-4" style={{ fontWeight: 600 }}>{a.message}</p>
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
                     </div>
                   ))}
                 </div>
@@ -522,8 +498,6 @@ export function DashboardPage() {
           </div>
         </div>
       </div>
-<<<<<<< HEAD
-=======
 
       {/* ML Models — full-width row below the 70/30 grid */}
       <div className="bg-white rounded-lg border border-gray-200 p-5">
@@ -601,7 +575,6 @@ export function DashboardPage() {
 
         </div>
       </div>
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
     </div>
   );
 }

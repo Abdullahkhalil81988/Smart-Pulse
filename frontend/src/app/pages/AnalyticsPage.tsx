@@ -1,10 +1,4 @@
 import { useEffect, useState } from "react";
-<<<<<<< HEAD
-import { BarChart2, Activity, Zap, CheckCircle, X, Loader2 } from "lucide-react";
-import { WireframeBox } from "../components/WireframeBox";
-import api from "../lib/api";
-
-=======
 import { Activity, Zap, CheckCircle, X, Loader2, Package } from "lucide-react";
 import api from "../lib/api";
 
@@ -15,7 +9,6 @@ interface MLReport {
   last_training: string | Record<string, unknown>;
 }
 
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
 interface PredictionStats {
   total: number;
   anomalies: number;
@@ -41,20 +34,13 @@ function formatTime(dateStr: string) {
 }
 
 export function AnalyticsPage() {
-<<<<<<< HEAD
-  const [activeTab, setActiveTab] = useState<"performance" | "log">("performance");
-=======
   const [activeTab, setActiveTab] = useState<"performance" | "log" | "models">("performance");
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
   const [showPanel, setShowPanel] = useState(false);
   const [selectedPrediction, setSelectedPrediction] = useState<PredictionItem | null>(null);
   const [stats, setStats] = useState<PredictionStats | null>(null);
   const [predictions, setPredictions] = useState<PredictionItem[]>([]);
   const [loading, setLoading] = useState(true);
-<<<<<<< HEAD
-=======
   const [mlReport, setMlReport] = useState<MLReport | null>(null);
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
 
   useEffect(() => {
     async function fetchData() {
@@ -72,10 +58,7 @@ export function AnalyticsPage() {
       }
     }
     fetchData();
-<<<<<<< HEAD
-=======
     api.get<MLReport>("/api/ml/report").then(setMlReport).catch(() => {});
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
   }, []);
 
   if (loading) {
@@ -89,10 +72,7 @@ export function AnalyticsPage() {
   const tabs = [
     { key: "performance", label: "Model performance" },
     { key: "log", label: "Prediction log" },
-<<<<<<< HEAD
-=======
     { key: "models", label: "Model artifacts" },
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
   ] as const;
 
   const verdictCounts = predictions.reduce(
@@ -502,16 +482,6 @@ export function AnalyticsPage() {
         </div>
       )}
 
-<<<<<<< HEAD
-      {/* Annotation */}
-      <div className="border border-dashed border-gray-300 rounded-lg p-3 bg-gray-50">
-        <div className="flex items-center gap-2">
-          <Zap size={12} className="text-violet-400" />
-          <p className="text-xs text-gray-400" style={{ fontWeight: 600 }}>Wireframe: Analytics — Model health (back office only)</p>
-        </div>
-        <p className="text-xs text-gray-400 mt-0.5">Tabs: Model performance (accuracy, confusion matrix, drift) · Prediction log (all inferences)</p>
-      </div>
-=======
       {activeTab === "models" && (
         <div className="space-y-4">
           {!mlReport ? (
@@ -577,7 +547,6 @@ export function AnalyticsPage() {
           )}
         </div>
       )}
->>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
 
       {/* Side Panel Overlay */}
       {showPanel && (
