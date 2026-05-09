@@ -59,7 +59,11 @@ export function SalesPage() {
         api.get<SaleStats>(`/api/sales/stats?date=${selectedDate}`),
         api.get<number[]>(`/api/sales/chart?date=${selectedDate}`),
         api.get<ProductPerformance>(`/api/sales/performance`),
+<<<<<<< HEAD
         api.get<Transaction[]>(`/api/pos/transactions?search=Invoice`)
+=======
+        api.get<Transaction[]>(`/api/pos/transactions?paymentMethod=Invoice`)
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
       ]);
       setStats(sData);
       setChartData(cData.map((val, hour) => ({ 

@@ -53,7 +53,10 @@ def predict(df: pd.DataFrame, model_type: Optional[str] = None) -> dict:
     anomaly_flag = False
     pca_x = None
     pca_y = None
+<<<<<<< HEAD
     historical_data = None
+=======
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
 
     if model_type == "forecaster":
         model = joblib.load(_latest_model_path("forecaster"))
@@ -64,6 +67,7 @@ def predict(df: pd.DataFrame, model_type: Optional[str] = None) -> dict:
         confidence = 1.0
         model_name = _latest_model_path("forecaster").stem
 
+<<<<<<< HEAD
         # Extract historical data manually for the frontend chart
         df_copy = df.copy()
         if "Price" in df_copy.columns and "UnitPrice" not in df_copy.columns:
@@ -79,6 +83,8 @@ def predict(df: pd.DataFrame, model_type: Optional[str] = None) -> dict:
             for _, row in monthly.tail(12).iterrows()
         ]
 
+=======
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
     elif model_type == "classifier":
         best_path = Path(MODEL_DIR) / "classifier_best.joblib"
         model_path = best_path if best_path.exists() else _latest_model_path("classifier")
@@ -140,5 +146,8 @@ def predict(df: pd.DataFrame, model_type: Optional[str] = None) -> dict:
         "anomaly_flag": anomaly_flag,
         "pca_x": pca_x,
         "pca_y": pca_y,
+<<<<<<< HEAD
         "historical_data": historical_data,
+=======
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
     }

@@ -23,5 +23,9 @@ class PredictionResult(BaseModel):
     cluster_label: Optional[int] = None
     anomaly_flag: bool = False
     pca_x: Optional[float] = None
+<<<<<<< HEAD
     pca_y: Optional[float] = None
     historical_data: Optional[list[dict]] = None
+=======
+    pca_y: Optional[float] = None
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3

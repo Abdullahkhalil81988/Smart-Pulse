@@ -1,8 +1,21 @@
 import { useEffect, useState } from "react";
+<<<<<<< HEAD
 import { BarChart2, Activity, Zap, CheckCircle, X, Loader2 } from "lucide-react";
 import { WireframeBox } from "../components/WireframeBox";
 import api from "../lib/api";
 
+=======
+import { Activity, Zap, CheckCircle, X, Loader2, Package } from "lucide-react";
+import api from "../lib/api";
+
+interface MLReport {
+  artifact_count: number;
+  model_summary: Record<string, string[]>;
+  anomaly_model_available: boolean;
+  last_training: string | Record<string, unknown>;
+}
+
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
 interface PredictionStats {
   total: number;
   anomalies: number;
@@ -28,12 +41,20 @@ function formatTime(dateStr: string) {
 }
 
 export function AnalyticsPage() {
+<<<<<<< HEAD
   const [activeTab, setActiveTab] = useState<"performance" | "log">("performance");
+=======
+  const [activeTab, setActiveTab] = useState<"performance" | "log" | "models">("performance");
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
   const [showPanel, setShowPanel] = useState(false);
   const [selectedPrediction, setSelectedPrediction] = useState<PredictionItem | null>(null);
   const [stats, setStats] = useState<PredictionStats | null>(null);
   const [predictions, setPredictions] = useState<PredictionItem[]>([]);
   const [loading, setLoading] = useState(true);
+<<<<<<< HEAD
+=======
+  const [mlReport, setMlReport] = useState<MLReport | null>(null);
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
 
   useEffect(() => {
     async function fetchData() {
@@ -51,6 +72,10 @@ export function AnalyticsPage() {
       }
     }
     fetchData();
+<<<<<<< HEAD
+=======
+    api.get<MLReport>("/api/ml/report").then(setMlReport).catch(() => {});
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
   }, []);
 
   if (loading) {
@@ -64,6 +89,10 @@ export function AnalyticsPage() {
   const tabs = [
     { key: "performance", label: "Model performance" },
     { key: "log", label: "Prediction log" },
+<<<<<<< HEAD
+=======
+    { key: "models", label: "Model artifacts" },
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
   ] as const;
 
   const verdictCounts = predictions.reduce(
@@ -473,6 +502,7 @@ export function AnalyticsPage() {
         </div>
       )}
 
+<<<<<<< HEAD
       {/* Annotation */}
       <div className="border border-dashed border-gray-300 rounded-lg p-3 bg-gray-50">
         <div className="flex items-center gap-2">
@@ -481,6 +511,73 @@ export function AnalyticsPage() {
         </div>
         <p className="text-xs text-gray-400 mt-0.5">Tabs: Model performance (accuracy, confusion matrix, drift) · Prediction log (all inferences)</p>
       </div>
+=======
+      {activeTab === "models" && (
+        <div className="space-y-4">
+          {!mlReport ? (
+            <div className="flex items-center justify-center py-12 text-gray-400">
+              <Loader2 size={20} className="animate-spin mr-2" />
+              <span className="text-sm">Loading model report…</span>
+            </div>
+          ) : (
+            <>
+              {/* Summary bar */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: "Total artifacts", value: mlReport.artifact_count },
+                  { label: "Forecaster", value: mlReport.model_summary.forecaster?.length ?? 0 },
+                  { label: "Classifier", value: mlReport.model_summary.classifier?.length ?? 0 },
+                  { label: "Anomaly detector", value: mlReport.model_summary.anomaly?.length ?? 0 },
+                ].map(s => (
+                  <div key={s.label} className="bg-white rounded-lg border border-gray-200 p-3">
+                    <p className="text-gray-400 text-xs">{s.label}</p>
+                    <p className="text-gray-900 mt-1 text-xl" style={{ fontWeight: 700 }}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Artifact list */}
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+                  <Package size={13} className="text-violet-500" />
+                  <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Deployed model files</p>
+                  <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${mlReport.anomaly_model_available ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`} style={{ fontWeight: 600 }}>
+                    {mlReport.anomaly_model_available ? "Anomaly model ready" : "Anomaly model missing"}
+                  </span>
+                </div>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="text-left px-4 py-2.5 text-gray-500" style={{ fontWeight: 500 }}>Type</th>
+                      <th className="text-left px-4 py-2.5 text-gray-500" style={{ fontWeight: 500 }}>Files</th>
+                      <th className="text-left px-4 py-2.5 text-gray-500" style={{ fontWeight: 500 }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(mlReport.model_summary).map(([type, files]) => (
+                      <tr key={type} className="border-b border-gray-50">
+                        <td className="px-4 py-3 text-gray-700 capitalize" style={{ fontWeight: 600 }}>{type}</td>
+                        <td className="px-4 py-3 text-gray-500 font-mono">{(files as string[]).join(", ") || "—"}</td>
+                        <td className="px-4 py-3">
+                          {(files as string[]).length > 0
+                            ? <span className="text-emerald-600 text-xs" style={{ fontWeight: 600 }}>✓ Loaded</span>
+                            : <span className="text-red-500 text-xs" style={{ fontWeight: 600 }}>✗ Missing</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
+                  <p className="text-xs text-gray-400">
+                    Last training: {typeof mlReport.last_training === "string" ? mlReport.last_training : JSON.stringify(mlReport.last_training)}
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
 
       {/* Side Panel Overlay */}
       {showPanel && (

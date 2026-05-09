@@ -1,2 +1,6 @@
+<<<<<<< HEAD
 *
 !.gitignore
+=======
+# allow trained model artifacts
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3

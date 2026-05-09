@@ -1,5 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+<<<<<<< HEAD
 import { AlertTriangle, Activity, Upload, Loader2, Inbox } from "lucide-react";
+=======
+import { AlertTriangle, Activity, Upload, Loader2, Inbox, Users, ShieldAlert, X } from "lucide-react";
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import api from "../lib/api";
 import { parseCsvText } from "../lib/csv";
@@ -82,6 +86,19 @@ export function DashboardPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+<<<<<<< HEAD
+=======
+  const [churnResult, setChurnResult] = useState<{ prediction: number; confidence: number; model_name: string; cluster_label?: number | null } | null>(null);
+  const [churnUploading, setChurnUploading] = useState(false);
+  const [churnError, setChurnError] = useState<string | null>(null);
+  const churnRef = useRef<HTMLInputElement>(null);
+
+  const [fraudResult, setFraudResult] = useState<{ prediction: number; confidence: number; model_name: string; anomaly_flag: boolean } | null>(null);
+  const [fraudUploading, setFraudUploading] = useState(false);
+  const [fraudError, setFraudError] = useState<string | null>(null);
+  const fraudRef = useRef<HTMLInputElement>(null);
+
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
   const fetchDashboard = useCallback(async () => {
     try {
       const [statsRes, alertsRes, predsRes] = await Promise.all([
@@ -152,6 +169,33 @@ export function DashboardPage() {
     }
   }
 
+<<<<<<< HEAD
+=======
+  async function handleChurnUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setChurnError(null); setChurnResult(null); setChurnUploading(true);
+    try {
+      const form = new FormData(); form.append("file", file);
+      const res = await api.upload<typeof churnResult>("/api/ml/predict?model_type=classifier", form);
+      setChurnResult(res); await fetchDashboard();
+    } catch (err) { setChurnError(err instanceof Error ? err.message : "Upload failed"); }
+    finally { setChurnUploading(false); if (churnRef.current) churnRef.current.value = ""; }
+  }
+
+  async function handleFraudUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFraudError(null); setFraudResult(null); setFraudUploading(true);
+    try {
+      const form = new FormData(); form.append("file", file);
+      const res = await api.upload<typeof fraudResult>("/api/ml/predict?model_type=anomaly", form);
+      setFraudResult(res); await fetchDashboard();
+    } catch (err) { setFraudError(err instanceof Error ? err.message : "Upload failed"); }
+    finally { setFraudUploading(false); if (fraudRef.current) fraudRef.current.value = ""; }
+  }
+
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px]">
@@ -414,9 +458,28 @@ export function DashboardPage() {
         <div className="lg:col-span-3">
           <div className="lg:sticky lg:top-6">
             <div className="bg-white rounded-lg border border-gray-200 p-4">
+<<<<<<< HEAD
               <div className="flex items-center gap-2 mb-3">
                 <AlertTriangle size={14} className="text-amber-500" />
                 <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Active alerts</p>
+=======
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={14} className="text-amber-500" />
+                  <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Active alerts</p>
+                </div>
+                {alerts.length > 0 && (
+                  <button
+                    onClick={async () => {
+                      await api.patch("/api/alerts/read-all");
+                      setAlerts([]);
+                    }}
+                    className="text-xs text-gray-400 hover:text-gray-600"
+                  >
+                    Clear all
+                  </button>
+                )}
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
               </div>
 
               {alerts.length === 0 ? (
@@ -428,11 +491,29 @@ export function DashboardPage() {
               ) : (
                 <div className="space-y-2.5">
                   {alerts.map((a) => (
+<<<<<<< HEAD
                     <div key={a._id} className={`rounded-md border p-3 ${severityStyle(a.severity)}`}>
                       <span className="text-xs px-2 py-0.5 rounded bg-white/60 inline-block mb-1.5" style={{ fontWeight: 700 }}>
                         {a.severity.toUpperCase()}
                       </span>
                       <p className="text-xs" style={{ fontWeight: 600 }}>{a.message}</p>
+=======
+                    <div key={a._id} className={`rounded-md border p-3 ${severityStyle(a.severity)} relative`}>
+                      <button
+                        onClick={async () => {
+                          await api.patch(`/api/alerts/${a._id}/read`);
+                          setAlerts(prev => prev.filter(x => x._id !== a._id));
+                        }}
+                        className="absolute top-2 right-2 opacity-50 hover:opacity-100 text-current"
+                        title="Dismiss"
+                      >
+                        <X size={11} />
+                      </button>
+                      <span className="text-xs px-2 py-0.5 rounded bg-white/60 inline-block mb-1.5" style={{ fontWeight: 700 }}>
+                        {a.severity.toUpperCase()}
+                      </span>
+                      <p className="text-xs pr-4" style={{ fontWeight: 600 }}>{a.message}</p>
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
                     </div>
                   ))}
                 </div>
@@ -441,6 +522,86 @@ export function DashboardPage() {
           </div>
         </div>
       </div>
+<<<<<<< HEAD
+=======
+
+      {/* ML Models — full-width row below the 70/30 grid */}
+      <div className="bg-white rounded-lg border border-gray-200 p-5">
+        <p className="text-gray-900 text-sm mb-4" style={{ fontWeight: 600 }}>Run ML Models</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          {/* Customer Churn */}
+          <div className="border border-pink-100 rounded-lg p-4 bg-pink-50/30">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-pink-100 flex items-center justify-center flex-shrink-0">
+                <Users size={15} className="text-pink-600" />
+              </div>
+              <div>
+                <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Customer Churn Prediction</p>
+                <p className="text-gray-400 text-xs">Needs: tenure, MonthlyCharges, TotalCharges columns</p>
+              </div>
+            </div>
+            <div className="border-2 border-dashed border-pink-200 rounded-lg p-4 text-center cursor-pointer hover:border-pink-400 hover:bg-pink-50 transition-all" onClick={() => churnRef.current?.click()}>
+              <input ref={churnRef} type="file" accept=".csv" className="hidden" onChange={handleChurnUpload} disabled={churnUploading} />
+              {churnUploading ? <Loader2 size={18} className="text-pink-500 animate-spin mx-auto mb-1.5" /> : <Upload size={18} className="text-pink-400 mx-auto mb-1.5" />}
+              <p className="text-xs text-gray-600" style={{ fontWeight: 500 }}>{churnUploading ? "Analyzing customers…" : "Drop customer CSV here"}</p>
+            </div>
+            {churnError && (
+              <div className="mt-3 flex items-start gap-2 p-2.5 rounded-lg bg-red-50 border border-red-200">
+                <AlertTriangle size={13} className="text-red-500 mt-0.5 flex-shrink-0" />
+                <p className="text-red-700 text-xs">{churnError}</p>
+              </div>
+            )}
+            {churnResult && (
+              <div className="mt-3 p-3 bg-white rounded-lg border border-pink-200 flex items-center justify-between">
+                <div>
+                  <p className="text-pink-600 text-xl" style={{ fontWeight: 800 }}>{(churnResult.prediction * 100).toFixed(1)}% churn risk</p>
+                  <p className="text-gray-400 text-xs mt-0.5">Confidence {Math.round(churnResult.confidence * 100)}%{churnResult.cluster_label != null && ` · Cluster ${churnResult.cluster_label}`}</p>
+                </div>
+                <span className="text-xs px-2 py-1 rounded-full bg-pink-100 text-pink-700" style={{ fontWeight: 600 }}>{churnResult.model_name}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Transaction Fraud */}
+          <div className="border border-violet-100 rounded-lg p-4 bg-violet-50/30">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
+                <ShieldAlert size={15} className="text-violet-600" />
+              </div>
+              <div>
+                <p className="text-gray-900 text-sm" style={{ fontWeight: 600 }}>Transaction Fraud Detection</p>
+                <p className="text-gray-400 text-xs">Needs: Time, Amount, V1–V28 columns</p>
+              </div>
+            </div>
+            <div className="border-2 border-dashed border-violet-200 rounded-lg p-4 text-center cursor-pointer hover:border-violet-400 hover:bg-violet-50 transition-all" onClick={() => fraudRef.current?.click()}>
+              <input ref={fraudRef} type="file" accept=".csv" className="hidden" onChange={handleFraudUpload} disabled={fraudUploading} />
+              {fraudUploading ? <Loader2 size={18} className="text-violet-500 animate-spin mx-auto mb-1.5" /> : <Upload size={18} className="text-violet-400 mx-auto mb-1.5" />}
+              <p className="text-xs text-gray-600" style={{ fontWeight: 500 }}>{fraudUploading ? "Analyzing transactions…" : "Drop transactions CSV here"}</p>
+            </div>
+            {fraudError && (
+              <div className="mt-3 flex items-start gap-2 p-2.5 rounded-lg bg-red-50 border border-red-200">
+                <AlertTriangle size={13} className="text-red-500 mt-0.5 flex-shrink-0" />
+                <p className="text-red-700 text-xs">{fraudError}</p>
+              </div>
+            )}
+            {fraudResult && (
+              <div className="mt-3 p-3 bg-white rounded-lg border border-violet-200 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-violet-600 text-xl" style={{ fontWeight: 800 }}>{(fraudResult.prediction * 100).toFixed(1)}% fraud prob.</p>
+                    {fraudResult.anomaly_flag && <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700" style={{ fontWeight: 700 }}>ANOMALY</span>}
+                  </div>
+                  <p className="text-gray-400 text-xs mt-0.5">Confidence {Math.round(fraudResult.confidence * 100)}%</p>
+                </div>
+                <span className="text-xs px-2 py-1 rounded-full bg-violet-100 text-violet-700" style={{ fontWeight: 600 }}>{fraudResult.model_name}</span>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
     </div>
   );
 }

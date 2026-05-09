@@ -98,7 +98,11 @@ router.post('/checkout', auth, async (req, res) => {
 // List transactions with search filters
 router.get('/transactions', auth, async (req, res) => {
   try {
+<<<<<<< HEAD
     const { search, date } = req.query;
+=======
+    const { search, date, paymentMethod } = req.query;
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
     let query = { userId: req.user.id };
 
     if (search) {
@@ -108,6 +112,13 @@ router.get('/transactions', auth, async (req, res) => {
       ];
     }
 
+<<<<<<< HEAD
+=======
+    if (paymentMethod) {
+      query.paymentMethod = paymentMethod;
+    }
+
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
     if (date) {
       const start = new Date(date);
       start.setHours(0,0,0,0);

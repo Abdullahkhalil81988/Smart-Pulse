@@ -8,6 +8,7 @@ temp_env/
 
 # Node
 node_modules/
+<<<<<<< HEAD
 .vite/
 dist/
 frontend/dist/
@@ -22,3 +23,7 @@ backend/node_modules/
 .env
 *.env
 firebase-service-account.json
+=======
+.env
+*.env
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3

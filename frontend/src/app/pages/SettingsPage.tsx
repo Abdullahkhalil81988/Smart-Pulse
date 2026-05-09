@@ -612,7 +612,29 @@ export function SettingsPage() {
                         </td>
                         <td className="px-4 py-3 text-gray-500">{m.email}</td>
                         <td className="px-4 py-3">
+<<<<<<< HEAD
                           <span className="text-gray-700 text-sm">{m.role}</span>
+=======
+                          {me && m._id !== me._id ? (
+                            <select
+                              value={m.role}
+                              onChange={async (e) => {
+                                try {
+                                  await api.patch(`/api/staff/${m._id}`, { role: e.target.value });
+                                  setMembers(prev => prev.map(s => s._id === m._id ? { ...s, role: e.target.value as any } : s));
+                                  toast.success("Role updated");
+                                } catch (err) {
+                                  toast.error(err instanceof Error ? err.message : "Update failed");
+                                }
+                              }}
+                              className="text-gray-700 text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none focus:border-violet-400"
+                            >
+                              {["Admin","Manager","Analyst","Cashier"].map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                          ) : (
+                            <span className="text-gray-700 text-sm">{m.role}</span>
+                          )}
+>>>>>>> 6eab19e008cd1df2c74fa13d07ce9e114dd1d8f3
                         </td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 rounded-full ${m.status === "Active" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`} style={{ fontWeight: 600 }}>
