@@ -55,7 +55,7 @@ router.post('/seed', auth, async (req, res) => {
     await Settings.findOneAndUpdate(
       { businessId: user.businessId },
       { $setOnInsert: { businessId: user.businessId, updatedByUserId: user._id } },
-      { upsert: true, new: true, session }
+      { upsert: true, returnDocument: 'after', session }
     );
 
     if (wipe) {
@@ -99,10 +99,11 @@ router.post('/seed', auth, async (req, res) => {
 
     // insertMany unordered (skip duplicates if already seeded)
     if (invDocs.length) {
-      try {
-        await Inventory.insertMany(invDocs, { ordered: false, session });
-      } catch (e) {
-        // ignore dup key errors when reseeding
+      const existing = await Inventory.find({ userId: user._id, code: { $in: invDocs.map(i => i.code) } }).session(session);
+      const existingCodes = new Set(existing.map(i => i.code));
+      const newInvDocs = invDocs.filter(i => !existingCodes.has(i.code));
+      if (newInvDocs.length) {
+        await Inventory.insertMany(newInvDocs, { session });
       }
     }
 
