@@ -162,6 +162,14 @@ export function SalesPage() {
                </div>
                
                <div className="space-y-3">
+                  {invItems.length > 0 && (
+                    <div className="flex gap-3 items-center px-1 mb-1">
+                      <div className="flex-1 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Item Name</div>
+                      <div className="w-20 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Qty</div>
+                      <div className="w-28 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Price</div>
+                      <div className="w-11"></div>
+                    </div>
+                  )}
                   {invItems.map((item, idx) => (
                     <div key={idx} className="flex gap-3 items-start animate-in fade-in slide-in-from-top-1 duration-200">
                       <input 

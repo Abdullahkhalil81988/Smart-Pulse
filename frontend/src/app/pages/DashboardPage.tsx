@@ -78,6 +78,7 @@ export function DashboardPage() {
 
   // Forecaster states
   const [forecastData, setForecastData] = useState<MLPredictionResult | null>(null);
+  const [previousForecasts, setPreviousForecasts] = useState<PredictionItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -94,14 +95,29 @@ export function DashboardPage() {
 
   const fetchDashboard = useCallback(async () => {
     try {
-      const [statsRes, alertsRes, predsRes] = await Promise.all([
+      const [statsRes, alertsRes, predsRes, forecasterRes] = await Promise.all([
         api.get<PredictionStats>("/api/predictions/stats"),
         api.get<AlertItem[]>("/api/alerts?limit=5"),
         api.get<{ predictions: PredictionItem[] }>("/api/predictions?limit=6"),
+        api.get<{ predictions: PredictionItem[] }>("/api/predictions?model_type=forecaster&limit=5"),
       ]);
       setStats(statsRes);
       setAlerts(alertsRes);
       setPredictions(predsRes.predictions);
+      
+      setPreviousForecasts(forecasterRes.predictions);
+      setForecastData(prev => {
+        if (!prev && forecasterRes.predictions.length > 0) {
+          const latest = forecasterRes.predictions[0];
+          return {
+            prediction: latest.prediction,
+            confidence: latest.confidence,
+            model_name: latest.model_name,
+            historical_data: undefined,
+          };
+        }
+        return prev;
+      });
     } catch (err) {
       console.error("Dashboard fetch error:", err);
     } finally {
@@ -344,6 +360,30 @@ export function DashboardPage() {
                     <p className="text-red-600 text-[11px] mt-1">
                       CSV format required: InvoiceDate, Quantity, UnitPrice columns with at least 10 rows of data.
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Previous Forecasts List */}
+              {previousForecasts.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <p className="text-xs text-gray-500 mb-2 font-semibold">Previous Forecasts</p>
+                  <div className="space-y-1">
+                    {previousForecasts.map(f => (
+                      <div 
+                        key={f._id} 
+                        className="flex items-center justify-between text-xs p-2 rounded hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-200"
+                        onClick={() => setForecastData({
+                          prediction: f.prediction,
+                          confidence: f.confidence,
+                          model_name: f.model_name,
+                          historical_data: undefined
+                        })}
+                      >
+                        <span className="text-gray-600">{new Date(f.createdAt).toLocaleDateString()}</span>
+                        <span className="font-semibold text-emerald-600">${f.prediction.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

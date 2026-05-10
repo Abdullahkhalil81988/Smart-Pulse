@@ -142,5 +142,25 @@ router.get('/transactions/:id', auth, async (req, res) => {
   }
 });
 
+// PATCH /api/pos/transactions/:id
+// Update transaction status
+router.patch('/transactions/:id', auth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!status) return res.status(400).json({ error: 'Status is required' });
+    
+    const transaction = await Transaction.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user.id },
+      { status },
+      { new: true }
+    );
+    
+    if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
+    res.json(transaction);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 

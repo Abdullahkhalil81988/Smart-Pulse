@@ -101,9 +101,19 @@ export function TransactionsPage() {
     setActiveTab("detail");
   };
 
-  const handleAction = (type: 'fraud' | 'safe') => {
-    toast.success(type === 'fraud' ? "Marked as Fraud" : "Marked as Safe");
-    // In a real app, this would call an API to update status
+  const handleAction = async (type: 'fraud' | 'safe' | 'completed') => {
+    if (!selected) return;
+    try {
+      const newStatus = type === 'fraud' ? 'FRAUD' : type === 'safe' ? 'SAFE' : 'Completed';
+      await api.patch(`/api/pos/transactions/${selected._id}`, { status: newStatus });
+      toast.success(type === 'fraud' ? "Marked as Fraud" : type === 'safe' ? "Marked as Safe" : "Marked as Completed");
+      
+      setTransactions(prev => prev.map(t => t._id === selected._id ? { ...t, status: newStatus } : t));
+      setSelected(prev => prev ? { ...prev, status: newStatus } : null);
+      
+    } catch (err) {
+      toast.error("Failed to update transaction status");
+    }
   };
 
   const displayTxns = activeTab === "flagged"
@@ -203,6 +213,13 @@ export function TransactionsPage() {
                 className="h-10 px-6 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm transition-colors" style={{ fontWeight: 600 }}>
                 Mark Safe
               </button>
+              {selected.paymentMethod === 'Invoice' && selected.status !== 'Completed' && (
+                <button 
+                  onClick={() => handleAction('completed')}
+                  className="h-10 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm transition-colors shadow-sm" style={{ fontWeight: 600 }}>
+                  Mark Completed
+                </button>
+              )}
             </div>
           </div>
 

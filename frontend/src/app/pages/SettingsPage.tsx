@@ -142,23 +142,9 @@ export function SettingsPage() {
               <div className="bg-white rounded-lg border border-gray-200 p-5">
                 <p className="text-gray-900 text-sm mb-4" style={{ fontWeight: 600 }}>Business information</p>
                 <div className="space-y-4">
-                  {/* Logo */}
-                  <div className="flex items-center gap-4">
-                    <WireframeBox label="Logo" height={64} className="w-16" />
-                    <div>
-                      <p className="text-gray-700 text-xs" style={{ fontWeight: 500 }}>Business logo</p>
-                      <p className="text-gray-400 text-xs mt-0.5">PNG, JPG, SVG · max 2MB</p>
-                      <div className="flex gap-2 mt-2">
-                        <button className="px-2.5 py-1 rounded border border-gray-300 text-xs text-gray-600 hover:bg-gray-50">Upload</button>
-                        <button className="px-2.5 py-1 rounded border border-gray-200 text-xs text-gray-400">Remove</button>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Fields */}
                   {[
                     { label: "Business name", value: business?.name || "N/A" },
                     { label: "Industry", value: business?.industry || "N/A" },
-                    { label: "Business ID", value: business?._id || "N/A" },
                   ].map((f) => (
                     <div key={f.label} className="flex flex-col md:grid md:grid-cols-3 gap-2 md:gap-4 md:items-center">
                       <label className="text-gray-600 text-xs" style={{ fontWeight: 500 }}>{f.label}</label>
