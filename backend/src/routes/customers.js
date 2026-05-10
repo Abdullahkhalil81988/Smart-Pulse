@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
 const Transaction = require('../models/Transaction');
+const CustomerDb = require('../models/Customer');
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -35,7 +36,7 @@ router.get('/', auth, async (req, res) => {
     const limitNum = Math.min(500, Math.max(1, Number(limit) || 200));
 
     const match = {
-      userId: req.user.id,
+      userId: { $in: req.user.teamIds },
       customerName: { $nin: [null, '', 'Guest', 'guest'] },
     };
 
@@ -87,6 +88,17 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// GET /api/customers/directory
+// Returns raw customer records for the POS autocomplete
+router.get('/directory', auth, async (req, res) => {
+  try {
+    const records = await CustomerDb.find({ userId: { $in: req.user.teamIds } }).sort({ name: 1 });
+    res.json(records);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/customers/:name
 // Basic profile (computed) + recent transactions
 router.get('/:name', auth, async (req, res) => {
@@ -97,7 +109,7 @@ router.get('/:name', auth, async (req, res) => {
     }
 
     const txns = await Transaction.find({
-      userId: req.user.id,
+      userId: { $in: req.user.teamIds },
       customerName,
     })
       .sort({ createdAt: -1 })

@@ -42,6 +42,7 @@ router.post('/sync', auth, async (req, res) => {
         firebaseUid: user.firebaseUid,
         name: user.name,
         email: user.email,
+        role: user.role,
         business: user.businessId || null,
       },
     });
@@ -62,6 +63,7 @@ router.get('/me', auth, async (req, res) => {
         firebaseUid: user.firebaseUid,
         name: user.name,
         email: user.email,
+        role: user.role,
         business: user.businessId || null,
       },
     });

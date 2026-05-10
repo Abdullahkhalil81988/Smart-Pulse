@@ -58,6 +58,13 @@ export function SettingsPage() {
   const [members, setMembers] = useState<StaffMember[]>([]);
   const [savingConfig, setSavingConfig] = useState(false);
 
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [newMember, setNewMember] = useState({ email: '', password: '', role: 'Cashier' });
+  const [addingMember, setAddingMember] = useState(false);
+  
+  const [deletingMember, setDeletingMember] = useState<StaffMember | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   useEffect(() => {
     async function fetchBusiness() {
       try {
@@ -540,21 +547,11 @@ export function SettingsPage() {
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                   <p className="text-gray-900 text-xs md:text-sm" style={{ fontWeight: 600 }}>Team members</p>
                   <button
-                    onClick={async () => {
-                      const email = prompt("Invite email:");
-                      if (!email) return;
-                      try {
-                        await api.post("/api/staff/invite", { email, role: "Cashier" });
-                        toast.success("Invited");
-                        fetchStaff();
-                      } catch (err) {
-                        toast.error(err instanceof Error ? err.message : "Invite failed");
-                      }
-                    }}
+                    onClick={() => setIsAddingMember(true)}
                     className="h-8 px-3 rounded-md bg-gray-900 text-white flex items-center gap-1.5 text-xs hover:bg-gray-700 whitespace-nowrap"
                     style={{ fontWeight: 500 }}
                   >
-                    <Plus size={12} /> <span className="hidden sm:inline">Invite member</span><span className="sm:hidden">Invite</span>
+                    <Plus size={12} /> <span className="hidden sm:inline">Add member</span><span className="sm:hidden">Add</span>
                   </button>
                 </div>
                 <div className="overflow-x-auto">
@@ -602,9 +599,10 @@ export function SettingsPage() {
                             <select
                               value={m.role}
                               onChange={async (e) => {
+                                const newRole = e.target.value;
                                 try {
-                                  await api.patch(`/api/staff/${m._id}`, { role: e.target.value });
-                                  setMembers(prev => prev.map(s => s._id === m._id ? { ...s, role: e.target.value as any } : s));
+                                  await api.patch(`/api/staff/${m._id}`, { role: newRole });
+                                  setMembers(prev => prev.map(s => s._id === m._id ? { ...s, role: newRole as any } : s));
                                   toast.success("Role updated");
                                 } catch (err) {
                                   toast.error(err instanceof Error ? err.message : "Update failed");
@@ -626,16 +624,7 @@ export function SettingsPage() {
                         <td className="px-4 py-3">
                           {me && m._id !== me._id && (
                             <button
-                              onClick={async () => {
-                                if (!confirm(`Remove ${m.name}?`)) return;
-                                try {
-                                  await api.delete(`/api/staff/${m._id}`);
-                                  toast.success("Removed");
-                                  fetchStaff();
-                                } catch (err) {
-                                  toast.error(err instanceof Error ? err.message : "Remove failed");
-                                }
-                              }}
+                              onClick={() => setDeletingMember(m)}
                               className="text-gray-300 hover:text-red-400"
                               title="Remove"
                             >
@@ -683,22 +672,7 @@ export function SettingsPage() {
                       </td>
                     </tr>
 
-                    {/* Row 2: Process Refunds */}
-                    <tr className="border-b border-gray-50">
-                      <td className="px-4 py-3 text-gray-700">Process Refunds</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-emerald-600" style={{ fontWeight: 600 }}>✓</span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-emerald-600" style={{ fontWeight: 600 }}>✓</span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-gray-300">-</span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-gray-300">-</span>
-                      </td>
-                    </tr>
+
 
                     {/* Row 3: View Analytics & Sales */}
                     <tr className="border-b border-gray-50">
@@ -750,6 +724,133 @@ export function SettingsPage() {
         </div>
         <p className="text-xs text-gray-400 mt-0.5">Tabs: Business profile (name, location) · Model config (thresholds, features) · Staff & users (roles, permissions)</p>
       </div>
+
+      {/* Add Member Modal */}
+      {isAddingMember && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-gray-900 text-lg font-bold mb-4">Add Team Member</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Email</label>
+                <input
+                  type="email"
+                  placeholder="employee@company.com"
+                  value={newMember.email}
+                  onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
+                  className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Temporary Password</label>
+                <input
+                  type="password"
+                  placeholder="Min. 6 characters"
+                  value={newMember.password}
+                  onChange={(e) => setNewMember({ ...newMember, password: e.target.value })}
+                  className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Role</label>
+                <select
+                  value={newMember.role}
+                  onChange={(e) => setNewMember({ ...newMember, role: e.target.value })}
+                  className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none bg-white"
+                >
+                  <option value="Admin">Admin</option>
+                  <option value="Manager">Manager</option>
+                  <option value="Analyst">Analyst</option>
+                  <option value="Cashier">Cashier</option>
+                </select>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setIsAddingMember(false);
+                  setNewMember({ email: '', password: '', role: 'Cashier' });
+                }}
+                className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                disabled={addingMember}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!newMember.email || !newMember.password) {
+                    toast.error("Email and password are required");
+                    return;
+                  }
+                  if (newMember.password.length < 6) {
+                    toast.error("Password must be at least 6 characters");
+                    return;
+                  }
+                  try {
+                    setAddingMember(true);
+                    await api.post("/api/staff/invite", newMember);
+                    toast.success("Employee account created securely!");
+                    fetchStaff();
+                    setIsAddingMember(false);
+                    setNewMember({ email: '', password: '', role: 'Cashier' });
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Failed to create employee");
+                  } finally {
+                    setAddingMember(false);
+                  }
+                }}
+                disabled={addingMember}
+                className="px-5 py-2 rounded-lg bg-gray-900 text-white text-sm font-bold hover:bg-gray-800 transition-colors flex items-center gap-2"
+              >
+                {addingMember && <Loader2 size={14} className="animate-spin" />}
+                Add Member
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Member Modal */}
+      {deletingMember && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-gray-900 text-lg font-bold mb-2">Remove Team Member</h3>
+            <p className="text-gray-600 text-sm mb-6">
+              Are you sure you want to permanently remove <span className="font-semibold text-gray-900">{deletingMember.name}</span>? They will immediately lose access to the system, and their account will be permanently deleted from the database.
+            </p>
+            
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setDeletingMember(null)}
+                className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    setIsDeleting(true);
+                    await api.delete(`/api/staff/${deletingMember._id}`);
+                    toast.success("Employee removed successfully");
+                    fetchStaff();
+                    setDeletingMember(null);
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Failed to remove employee");
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                disabled={isDeleting}
+                className="px-5 py-2 rounded-lg bg-red-600 text-white text-sm font-bold hover:bg-red-700 transition-colors flex items-center gap-2"
+              >
+                {isDeleting && <Loader2 size={14} className="animate-spin" />}
+                Yes, Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

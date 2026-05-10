@@ -2,11 +2,12 @@ const router = require('express').Router();
 const auth = require('../middleware/auth');
 const Inventory = require('../models/Inventory');
 const Transaction = require('../models/Transaction');
+const CustomerDb = require('../models/Customer');
 
 // GET /api/pos/next-bill-no
 router.get('/next-bill-no', auth, async (req, res) => {
   try {
-    const count = await Transaction.countDocuments({ userId: req.user.id });
+    const count = await Transaction.countDocuments({ userId: { $in: req.user.teamIds } });
     res.json({ nextBillNo: count + 1 });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -35,7 +36,7 @@ router.post('/checkout', auth, async (req, res) => {
     }
 
     // 1. Calculate Bill Number automatically on backend
-    const count = await Transaction.countDocuments({ userId: req.user.id });
+    const count = await Transaction.countDocuments({ userId: { $in: req.user.teamIds } });
     const billNo = count + 1;
 
     // 2. Pre-flight Stock Check
@@ -43,7 +44,7 @@ router.post('/checkout', auth, async (req, res) => {
     for (const item of items) {
       if (item.code) {
         const invItem = await Inventory.findOne({ 
-          userId: req.user.id, 
+          userId: { $in: req.user.teamIds }, 
           code: item.code 
         });
 
@@ -59,17 +60,41 @@ router.post('/checkout', auth, async (req, res) => {
     for (const item of items) {
       if (item.code) {
         await Inventory.findOneAndUpdate(
-          { userId: req.user.id, code: item.code },
+          { userId: { $in: req.user.teamIds }, code: item.code },
           { $inc: { stock: -item.qty } }
         );
       }
     }
 
-    // 4. Create Transaction record
+    // 4. Resolve exact customer identity
+    const { customerId } = req.body;
+    let finalCustomerName = 'Guest';
+
+    if (customerId) {
+      // Existing customer
+      const existing = await CustomerDb.findById(customerId);
+      if (existing) {
+        finalCustomerName = existing.name; // This will be "Alice #A1B2"
+      } else {
+        finalCustomerName = customerName || 'Guest';
+      }
+    } else if (customerName && customerName.toLowerCase() !== 'guest') {
+      // New customer - attach a unique short ID to their name to prevent aggregation collisions
+      const shortId = Math.random().toString(36).substring(2, 6).toUpperCase();
+      finalCustomerName = `${customerName.trim()} #${shortId}`;
+      
+      try {
+        await CustomerDb.create({ userId: req.user.id, name: finalCustomerName });
+      } catch (err) {
+        console.error('Failed to create new customer profile:', err);
+      }
+    }
+
+    // 5. Create Transaction record
     const transaction = await Transaction.create({
       userId: req.user.id,
       billNo: String(billNo),
-      customerName: customerName || 'Guest',
+      customerName: finalCustomerName,
       items,
       subtotal,
       discountPct,
@@ -80,6 +105,7 @@ router.post('/checkout', auth, async (req, res) => {
       note,
       status: status || 'Completed'
     });
+
 
     res.status(201).json({
       success: true,
@@ -99,7 +125,7 @@ router.post('/checkout', auth, async (req, res) => {
 router.get('/transactions', auth, async (req, res) => {
   try {
     const { search, date, paymentMethod } = req.query;
-    let query = { userId: req.user.id };
+    let query = { userId: { $in: req.user.teamIds } };
 
     if (search) {
       query.$or = [
@@ -133,7 +159,7 @@ router.get('/transactions/:id', auth, async (req, res) => {
   try {
     const transaction = await Transaction.findOne({ 
       _id: req.params.id, 
-      userId: req.user.id 
+      userId: { $in: req.user.teamIds } 
     });
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
     res.json(transaction);
@@ -150,7 +176,7 @@ router.patch('/transactions/:id', auth, async (req, res) => {
     if (!status) return res.status(400).json({ error: 'Status is required' });
     
     const transaction = await Transaction.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.id },
+      { _id: req.params.id, userId: { $in: req.user.teamIds } },
       { status },
       { new: true }
     );

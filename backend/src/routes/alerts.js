@@ -6,7 +6,7 @@ const Alert = require('../models/Alert');
 router.get('/', auth, async (req, res) => {
   try {
     const { unread, limit = 20 } = req.query;
-    const filter = { userId: req.user.id };
+    const filter = { userId: { $in: req.user.teamIds } };
     if (unread === 'true') filter.read = false;
 
     const alerts = await Alert.find(filter).sort({ createdAt: -1 }).limit(Number(limit));
@@ -20,7 +20,7 @@ router.get('/', auth, async (req, res) => {
 router.patch('/:id/read', auth, async (req, res) => {
   try {
     const alert = await Alert.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.id },
+      { _id: req.params.id, userId: { $in: req.user.teamIds } },
       { read: true },
       { new: true }
     );
@@ -34,7 +34,7 @@ router.patch('/:id/read', auth, async (req, res) => {
 // PATCH /api/alerts/read-all  — mark all as read
 router.patch('/read-all', auth, async (req, res) => {
   try {
-    await Alert.updateMany({ userId: req.user.id, read: false }, { read: true });
+    await Alert.updateMany({ userId: { $in: req.user.teamIds }, read: false }, { read: true });
     res.json({ status: 'ok' });
   } catch (err) {
     res.status(500).json({ error: err.message });

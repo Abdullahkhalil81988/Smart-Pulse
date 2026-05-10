@@ -48,24 +48,31 @@ export function POSPage() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [customerName, setCustomerName] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [customerDir, setCustomerDir] = useState<any[]>([]);
+  const [showCustDropdown, setShowCustDropdown] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const custDropdownRef = useRef<HTMLDivElement>(null);
 
   // 1. Fetch live inventory & bill number
   useEffect(() => {
     async function loadData() {
       try {
         setLoading(true);
-        const [invData, billData] = await Promise.all([
+        const [invData, billData, custData] = await Promise.all([
           api.get<Product[]>("/api/inventory"),
-          api.get<{ nextBillNo: number }>("/api/pos/next-bill-no")
+          api.get<{ nextBillNo: number }>("/api/pos/next-bill-no"),
+          api.get<any[]>("/api/customers/directory").catch(() => [])
         ]);
         setInventory(Array.isArray(invData) ? invData : []);
         setBillNo(billData.nextBillNo);
+        setCustomerDir(Array.isArray(custData) ? custData : []);
       } catch (err) {
         setError("Failed to load POS data");
         setInventory([]);
+        setCustomerDir([]);
       } finally {
         setLoading(false);
       }
@@ -79,10 +86,15 @@ export function POSPage() {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setShowDropdown(false);
       }
+      if (custDropdownRef.current && !custDropdownRef.current.contains(e.target as Node)) {
+        setShowCustDropdown(false);
+      }
     }
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
+
+  const filteredCusts = customerDir.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()));
 
   // ── Dropdown items ──────────────────────────────────────────────────────
   const dropdownItems = Array.isArray(inventory)
@@ -160,14 +172,17 @@ export function POSPage() {
     setDiscountPct(0);
     setNote("");
     setCustomerName("");
+    setSelectedCustomerId(null);
     setError("");
-    // Re-fetch inventory & next bill no to get latest state
+    // Re-fetch inventory, next bill no, and customers to get latest state
     Promise.all([
       api.get<Product[]>("/api/inventory"),
-      api.get<{ nextBillNo: number }>("/api/pos/next-bill-no")
-    ]).then(([invData, billData]) => {
+      api.get<{ nextBillNo: number }>("/api/pos/next-bill-no"),
+      api.get<any[]>("/api/customers/directory").catch(() => [])
+    ]).then(([invData, billData, custData]) => {
       setInventory(Array.isArray(invData) ? invData : []);
       setBillNo(billData.nextBillNo);
+      setCustomerDir(Array.isArray(custData) ? custData : []);
     });
     setTimeout(() => searchRef.current?.focus(), 50);
   };
@@ -188,7 +203,8 @@ export function POSPage() {
         total,
         paymentMethod,
         note,
-        customerName
+        customerName,
+        customerId: selectedCustomerId
       });
       setCharged(true);
       if (response.nextBillNo) setBillNo(response.nextBillNo);
@@ -560,7 +576,7 @@ export function POSPage() {
               {/* Customer info */}
               <div className="space-y-3">
                 <p className="text-xs text-gray-500" style={{ fontWeight: 500 }}>Customer Name <span className="text-red-500">*</span></p>
-                <div className="relative">
+                <div className="relative" ref={custDropdownRef}>
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Search size={14} className="text-gray-400" />
                   </div>
@@ -568,9 +584,48 @@ export function POSPage() {
                     type="text"
                     placeholder="Search or enter name..."
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    onChange={(e) => {
+                      setCustomerName(e.target.value);
+                      setSelectedCustomerId(null);
+                      setShowCustDropdown(true);
+                    }}
+                    onFocus={() => setShowCustDropdown(true)}
                     className="block w-full h-11 pl-9 pr-3 text-sm bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all outline-none"
                   />
+                  {showCustDropdown && customerName.trim() && (
+                    <div className="absolute left-0 right-0 top-12 bg-white border border-gray-200 rounded-xl shadow-lg z-30 max-h-48 overflow-y-auto flex flex-col">
+                      {filteredCusts.length > 0 && (
+                        <div className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                          Existing
+                        </div>
+                      )}
+                      {filteredCusts.map((c) => (
+                        <button
+                          key={c._id}
+                          onMouseDown={() => {
+                            setCustomerName(c.name);
+                            setSelectedCustomerId(c._id);
+                            setShowCustDropdown(false);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-orange-50 transition-colors border-b border-gray-50 last:border-0"
+                        >
+                          <span style={{ fontWeight: 600 }}>{c.name}</span>
+                          <span className="text-xs text-gray-400 ml-2">Existing customer</span>
+                        </button>
+                      ))}
+                      <div className="border-t border-gray-100 mt-1"></div>
+                      <button
+                        onMouseDown={() => {
+                          setSelectedCustomerId(null);
+                          setShowCustDropdown(false);
+                        }}
+                        className="w-full px-4 py-2.5 text-left text-sm text-orange-600 hover:bg-orange-50 transition-colors flex items-center gap-2"
+                      >
+                        <span className="text-lg">+</span>
+                        <span style={{ fontWeight: 600 }}>Create new: "{customerName}"</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -745,6 +800,62 @@ export function POSPage() {
                 </div>
               </div>
 
+              {/* Customer info */}
+              <div className="space-y-3">
+                <p className="text-xs text-gray-500" style={{ fontWeight: 500 }}>Customer Name <span className="text-red-500">*</span></p>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search size={14} className="text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search or enter name..."
+                    value={customerName}
+                    onChange={(e) => {
+                      setCustomerName(e.target.value);
+                      setSelectedCustomerId(null);
+                      setShowCustDropdown(true);
+                    }}
+                    onFocus={() => setShowCustDropdown(true)}
+                    className="block w-full h-11 pl-9 pr-3 text-sm bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all outline-none"
+                  />
+                  {showCustDropdown && customerName.trim() && (
+                    <div className="absolute bottom-12 left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-30 max-h-48 overflow-y-auto flex flex-col">
+                      {filteredCusts.length > 0 && (
+                        <div className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                          Existing
+                        </div>
+                      )}
+                      {filteredCusts.map((c) => (
+                        <button
+                          key={c._id}
+                          onMouseDown={() => {
+                            setCustomerName(c.name);
+                            setSelectedCustomerId(c._id);
+                            setShowCustDropdown(false);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-orange-50 transition-colors border-b border-gray-50 last:border-0"
+                        >
+                          <span style={{ fontWeight: 600 }}>{c.name}</span>
+                          <span className="text-xs text-gray-400 ml-2">Existing customer</span>
+                        </button>
+                      ))}
+                      <div className="border-t border-gray-100 mt-1"></div>
+                      <button
+                        onMouseDown={() => {
+                          setSelectedCustomerId(null);
+                          setShowCustDropdown(false);
+                        }}
+                        className="w-full px-4 py-2.5 text-left text-sm text-orange-600 hover:bg-orange-50 transition-colors flex items-center gap-2"
+                      >
+                        <span className="text-lg">+</span>
+                        <span style={{ fontWeight: 600 }}>Create new: "{customerName}"</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Payment method */}
               <div className="space-y-3">
                 <p className="text-xs text-gray-500" style={{ fontWeight: 500 }}>Payment method</p>
@@ -780,21 +891,21 @@ export function POSPage() {
               {/* Charge button */}
               <button
                 onClick={async () => {
-                  if (cart.length > 0) {
+                  if (cart.length > 0 && customerName.trim()) {
                     await handleCharge();
                     if (!error) setShowMobileCart(false);
                   }
                 }}
-                disabled={cart.length === 0 || processing}
+                disabled={cart.length === 0 || processing || !customerName.trim()}
                 className={`w-full h-14 rounded-xl text-base transition-all flex items-center justify-center gap-2 ${
-                  cart.length === 0 || processing
+                  cart.length === 0 || processing || !customerName.trim()
                     ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                     : "bg-gray-900 hover:bg-gray-700 text-white shadow-md hover:shadow-lg"
                 }`}
                 style={{ fontWeight: 700 }}
               >
                 {processing && <Loader2 size={18} className="animate-spin" />}
-                {processing ? "Processing..." : cart.length === 0 ? "Add items to charge" : `Charge $${total.toFixed(2)}`}
+                {processing ? "Processing..." : cart.length === 0 ? "Add items to charge" : !customerName.trim() ? "Enter customer name" : `Charge $${total.toFixed(2)}`}
               </button>
 
             </div>

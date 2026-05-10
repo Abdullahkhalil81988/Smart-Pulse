@@ -16,6 +16,7 @@ interface MongoUser {
   firebaseUid: string;
   name: string;
   email: string;
+  role: string;
   business: { _id: string; name: string; industry: string } | null;
 }
 

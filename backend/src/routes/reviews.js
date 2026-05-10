@@ -87,7 +87,7 @@ router.post('/analyze', auth, async (req, res) => {
 
     req.app.get('broadcast')?.({ type: 'review_analysis', review: saved });
 
-    res.json({ _id: saved._id, predictions, summary });
+    res.json({ _id: saved._id, predictions: enrichedPredictions, summary });
   } catch (err) {
     console.error(`[reviews] analyze failed: ${err.message}`);
     res.status(500).json({ error: err.message });
@@ -99,12 +99,12 @@ router.get('/', auth, async (req, res) => {
   try {
     const { limit = 20, page = 1 } = req.query;
     console.log(`[reviews] list user=${req.user.id} limit=${limit} page=${page}`);
-    const reviews = await Review.find({ userId: req.user.id })
+    const reviews = await Review.find({ userId: { $in: req.user.teamIds } })
       .sort({ createdAt: -1 })
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));
 
-    const total = await Review.countDocuments({ userId: req.user.id });
+    const total = await Review.countDocuments({ userId: { $in: req.user.teamIds } });
     res.json({ reviews, total, page: Number(page) });
   } catch (err) {
     console.error(`[reviews] list failed: ${err.message}`);
@@ -116,7 +116,7 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     console.log(`[reviews] detail user=${req.user.id} review_id=${req.params.id}`);
-    const review = await Review.findOne({ _id: req.params.id, userId: req.user.id });
+    const review = await Review.findOne({ _id: req.params.id, userId: { $in: req.user.teamIds } });
     if (!review) return res.status(404).json({ error: 'Review analysis not found' });
     res.json(review);
   } catch (err) {

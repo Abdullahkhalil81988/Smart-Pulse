@@ -36,6 +36,13 @@ const backOfficeItems = [
   { to: "/settings", label: "Settings", icon: Settings, color: "text-gray-400" },
 ];
 
+const roleAccess: Record<string, string[]> = {
+  Admin: ["/dashboard", "/pos", "/transactions", "/sales", "/customers", "/sentiment-analysis", "/inventory", "/analytics", "/settings"],
+  Manager: ["/dashboard", "/pos", "/transactions", "/sales", "/customers", "/sentiment-analysis", "/inventory", "/analytics"],
+  Analyst: ["/dashboard", "/sales", "/sentiment-analysis", "/analytics"],
+  Cashier: ["/pos", "/transactions"],
+};
+
 export function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -47,8 +54,14 @@ export function Layout() {
     ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
     : "?";
   const displayName = user?.name || "User";
+  const userRole = user?.role || "Cashier";
 
-  const allItems = [...navItems, ...backOfficeItems];
+  const allowedRoutes = roleAccess[userRole] || roleAccess["Cashier"];
+
+  const filteredNavItems = navItems.filter((i) => allowedRoutes.includes(i.to));
+  const filteredBackOfficeItems = backOfficeItems.filter((i) => allowedRoutes.includes(i.to));
+
+  const allItems = [...filteredNavItems, ...filteredBackOfficeItems];
   const currentItem = allItems.find((i) => location.pathname.startsWith(i.to));
   const pageLabel = currentItem?.label ?? "Overview";
 
@@ -71,9 +84,9 @@ export function Layout() {
 
       {/* Main Nav */}
       <nav className="flex-1 px-2 py-3 overflow-y-auto">
-        <p className="px-2 pb-1 text-gray-500 uppercase" style={{ fontSize: 10, letterSpacing: 1 }}>Main</p>
+        {filteredNavItems.length > 0 && <p className="px-2 pb-1 text-gray-500 uppercase" style={{ fontSize: 10, letterSpacing: 1 }}>Main</p>}
         <ul className="space-y-0.5 mb-4">
-          {navItems.map((item) => (
+          {filteredNavItems.map((item) => (
             <li key={item.to}>
               <NavLink
                 to={item.to}
@@ -93,9 +106,11 @@ export function Layout() {
           ))}
         </ul>
 
-        <p className="px-2 pb-1 text-gray-500 uppercase" style={{ fontSize: 10, letterSpacing: 1 }}>Back Office</p>
-        <ul className="space-y-0.5">
-          {backOfficeItems.map((item) => (
+        {filteredBackOfficeItems.length > 0 && (
+          <>
+            <p className="px-2 pb-1 text-gray-500 uppercase" style={{ fontSize: 10, letterSpacing: 1 }}>Back Office</p>
+            <ul className="space-y-0.5">
+              {filteredBackOfficeItems.map((item) => (
             <li key={item.to}>
               <NavLink
                 to={item.to}
@@ -113,7 +128,9 @@ export function Layout() {
               </NavLink>
             </li>
           ))}
-        </ul>
+            </ul>
+          </>
+        )}
       </nav>
 
       {/* User */}
@@ -124,7 +141,7 @@ export function Layout() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-gray-300 text-xs truncate" style={{ fontWeight: 500 }}>{displayName}</p>
-            <p className="text-gray-500" style={{ fontSize: 10 }}>Admin</p>
+            <p className="text-gray-500" style={{ fontSize: 10 }}>{userRole}</p>
           </div>
           <LogOut size={13} className="text-gray-600 group-hover:text-gray-400" onClick={async () => { await logout(); navigate("/login"); }} />
         </div>

@@ -19,14 +19,14 @@ router.get('/stats', auth, async (req, res) => {
     prevEnd.setDate(prevEnd.getDate() - 1);
 
     // Current stats
-    const txns = await Transaction.find({ userId: req.user.id, createdAt: { $gte: start, $lte: end } });
+    const txns = await Transaction.find({ userId: { $in: req.user.teamIds }, createdAt: { $gte: start, $lte: end } });
     const revenue = txns.reduce((sum, t) => sum + t.total, 0);
     const count = txns.length;
     const avgOrder = count > 0 ? revenue / count : 0;
     const invoiceCount = txns.filter(t => t.paymentMethod === 'Invoice').length;
 
     // Previous stats (for trends)
-    const prevTxns = await Transaction.find({ userId: req.user.id, createdAt: { $gte: prevStart, $lte: prevEnd } });
+    const prevTxns = await Transaction.find({ userId: { $in: req.user.teamIds }, createdAt: { $gte: prevStart, $lte: prevEnd } });
     const prevRevenue = prevTxns.reduce((sum, t) => sum + t.total, 0);
     const prevCount = prevTxns.length;
 
@@ -62,7 +62,7 @@ router.get('/chart', auth, async (req, res) => {
     const end = new Date(targetDate);
     end.setHours(23,59,59,999);
 
-    const txns = await Transaction.find({ userId: req.user.id, createdAt: { $gte: start, $lte: end } });
+    const txns = await Transaction.find({ userId: { $in: req.user.teamIds }, createdAt: { $gte: start, $lte: end } });
     
     // Group by hour
     const hourly = Array(24).fill(0);
@@ -80,7 +80,7 @@ router.get('/chart', auth, async (req, res) => {
 // GET /api/sales/performance
 router.get('/performance', auth, async (req, res) => {
   try {
-    const txns = await Transaction.find({ userId: req.user.id });
+    const txns = await Transaction.find({ userId: { $in: req.user.teamIds } });
     
     const productStats = {};
     const categoryStats = {};

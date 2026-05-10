@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Users, ChevronRight, AlertTriangle, TrendingDown, Star, Zap, ShoppingBag, Mail, Loader2 } from "lucide-react";
 import { WireframeBox } from "../components/WireframeBox";
 import api from "../lib/api";
+import * as XLSX from "xlsx";
 
 type Risk = "HIGH" | "MED" | "LOW";
 
@@ -37,6 +38,10 @@ export function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [customerTxns, setCustomerTxns] = useState<any[]>([]);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   useEffect(() => {
     async function fetchCustomers() {
@@ -63,7 +68,67 @@ export function CustomersPage() {
     { key: "atrisk", label: "At-risk list" },
   ] as const;
 
-  const atRisk = useMemo(() => [...customers].sort((a, b) => b.churn - a.churn), [customers]);
+  const filteredCustomers = useMemo(() => {
+    if (!searchQuery.trim()) return customers;
+    return customers.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [customers, searchQuery]);
+
+  const atRisk = useMemo(() => [...filteredCustomers].sort((a, b) => b.churn - a.churn), [filteredCustomers]);
+
+  useEffect(() => {
+    if (activeTab === "profile" && selected) {
+      async function fetchProfile() {
+        try {
+          setLoadingProfile(true);
+          const res = await api.get(`/api/customers/${encodeURIComponent(selected!.name)}`);
+          setCustomerTxns((res as any).transactions || []);
+        } catch (err) {
+          console.error("Failed to fetch customer profile:", err);
+          setCustomerTxns([]);
+        } finally {
+          setLoadingProfile(false);
+        }
+      }
+      fetchProfile();
+    }
+  }, [activeTab, selected]);
+
+  const handleExportCSV = () => {
+    const ws = XLSX.utils.json_to_sheet(filteredCustomers.map(c => ({
+      Customer: c.name,
+      Email: c.email || '',
+      TotalSpend: c.spend,
+      Visits: c.visits,
+      ChurnScore: c.churn,
+      Risk: c.risk,
+      LastVisit: c.lastSeen ? new Date(c.lastSeen).toLocaleDateString() : ''
+    })));
+    const csvContent = XLSX.utils.sheet_to_csv(ws);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `customers_export_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+  };
+
+  const handleExportExcel = () => {
+    const ws = XLSX.utils.json_to_sheet(filteredCustomers.map(c => ({
+      Customer: c.name,
+      Email: c.email || '',
+      TotalSpend: c.spend,
+      Visits: c.visits,
+      ChurnScore: c.churn,
+      Risk: c.risk,
+      LastVisit: c.lastSeen ? new Date(c.lastSeen).toLocaleDateString() : ''
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Customers");
+    XLSX.writeFile(wb, `customers_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+    setShowExportMenu(false);
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-6xl w-full">
@@ -75,9 +140,29 @@ export function CustomersPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="h-8 px-3 rounded-md border border-gray-300 bg-white flex items-center gap-2 text-xs md:text-sm text-gray-500 flex-1 sm:flex-initial min-w-0">
-            <span className="truncate">🔍 Search customers…</span>
+            <span>🔍</span>
+            <input 
+              type="text" 
+              placeholder="Search customers…" 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-transparent border-none outline-none w-full"
+            />
           </div>
-          <button className="h-8 px-3 rounded-md border border-gray-300 bg-white text-xs md:text-sm text-gray-600 whitespace-nowrap">Export ↓</button>
+          <div className="relative">
+            <button 
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="h-8 px-3 rounded-md border border-gray-300 bg-white text-xs md:text-sm text-gray-600 whitespace-nowrap hidden sm:block hover:bg-gray-50"
+            >
+              Export ↓
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 mt-1 w-36 bg-white border border-gray-200 rounded-md shadow-lg z-10 overflow-hidden">
+                <button onClick={handleExportCSV} className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-100 font-medium">Export as CSV</button>
+                <button onClick={handleExportExcel} className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-100 border-t border-gray-100 font-medium">Export as Excel</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -93,7 +178,7 @@ export function CustomersPage() {
             {tab.label}
             {tab.key === "atrisk" && (
               <span className="ml-1.5 bg-red-100 text-red-600 rounded-full px-1.5 py-0.5" style={{ fontSize: 10, fontWeight: 700 }}>
-                {customers.filter((c) => c.risk === "HIGH").length}
+                {filteredCustomers.filter((c) => c.risk === "HIGH").length}
               </span>
             )}
           </button>
@@ -119,16 +204,15 @@ export function CustomersPage() {
                     <p>Loading customers…</p>
                   </td>
                 </tr>
-              ) : customers.length === 0 ? (
+              ) : filteredCustomers.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-16 text-center text-gray-400">
                     <Users size={28} className="mx-auto mb-2 opacity-40" />
-                    <p>No customers yet.</p>
-                    <p className="text-[11px] mt-1">Create some POS transactions to populate this list.</p>
+                    <p>No customers found.</p>
                   </td>
                 </tr>
               ) : (
-              customers.map((c) => (
+              filteredCustomers.map((c) => (
                 <tr
                   key={c.id}
                   className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
@@ -212,50 +296,28 @@ export function CustomersPage() {
                 {/* Half-circle speedometer gauge */}
                 <div className="flex flex-col items-center py-6">
                   <div className="relative w-48 h-24">
-                    <svg viewBox="0 0 200 100" className="w-full h-full">
+                    <svg viewBox="0 0 200 100" className="w-full h-full overflow-visible">
                       {/* Green zone (LOW) */}
-                      <path
-                        d="M 10 95 A 90 90 0 0 1 70 20"
-                        fill="none"
-                        stroke="#10b981"
-                        strokeWidth="16"
-                        strokeLinecap="round"
-                      />
+                      <path d="M 10 95 A 90 90 0 0 1 70 20" fill="none" stroke="#10b981" strokeWidth="16" strokeLinecap="round" />
                       {/* Yellow zone (MED) */}
-                      <path
-                        d="M 70 20 A 90 90 0 0 1 130 20"
-                        fill="none"
-                        stroke="#fbbf24"
-                        strokeWidth="16"
-                        strokeLinecap="round"
-                      />
+                      <path d="M 70 20 A 90 90 0 0 1 130 20" fill="none" stroke="#fbbf24" strokeWidth="16" strokeLinecap="round" />
                       {/* Red zone (HIGH) */}
-                      <path
-                        d="M 130 20 A 90 90 0 0 1 190 95"
-                        fill="none"
-                        stroke="#ef4444"
-                        strokeWidth="16"
-                        strokeLinecap="round"
-                      />
-                      {/* Needle pointing to green zone (12/100) */}
-                      <line
-                        x1="100"
-                        y1="95"
-                        x2="35"
-                        y2="60"
-                        stroke="#1f2937"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                      />
-                      {/* Center dot */}
-                      <circle cx="100" cy="95" r="5" fill="#1f2937" />
+                      <path d="M 130 20 A 90 90 0 0 1 190 95" fill="none" stroke="#ef4444" strokeWidth="16" strokeLinecap="round" />
+                      
+                      {/* Needle */}
+                      <g style={{ transform: `rotate(${selected.churn * 1.8}deg)`, transformOrigin: "100px 95px", transition: "transform 1s cubic-bezier(0.4, 0, 0.2, 1)" }}>
+                        <line x1="100" y1="95" x2="30" y2="95" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" />
+                        <circle cx="100" cy="95" r="5" fill="#1f2937" />
+                      </g>
                     </svg>
                   </div>
 
-                  <p className="text-emerald-600 text-2xl mt-2" style={{ fontWeight: 800 }}>
-                    Score: 12/100
+                  <p className={`text-2xl mt-2 ${selected.risk === "HIGH" ? "text-red-600" : selected.risk === "MED" ? "text-amber-600" : "text-emerald-600"}`} style={{ fontWeight: 800 }}>
+                    Score: {selected.churn}/100
                   </p>
-                  <p className="text-gray-400 text-xs mt-1">Low risk — healthy engagement</p>
+                  <p className="text-gray-400 text-xs mt-1">
+                    {selected.risk === "HIGH" ? "High risk — critical intervention needed" : selected.risk === "MED" ? "Medium risk — monitor engagement" : "Low risk — healthy engagement"}
+                  </p>
                 </div>
               </div>
 
@@ -264,9 +326,9 @@ export function CustomersPage() {
                 <p className="text-gray-900 text-sm mb-4" style={{ fontWeight: 600 }}>Vital Context</p>
                 <div className="space-y-3">
                   {[
-                    { label: "Days since last visit", value: "3" },
-                    { label: "Support tickets", value: "0" },
-                    { label: "Avg order value", value: "$141" },
+                    { label: "Days since last visit", value: selected.lastSeen ? Math.floor((Date.now() - new Date(selected.lastSeen).getTime()) / (1000 * 3600 * 24)).toString() : "N/A" },
+                    { label: "Total visits", value: selected.visits.toString() },
+                    { label: "Avg order value", value: selected.visits > 0 ? `$${(selected.spend / selected.visits).toFixed(2)}` : "$0.00" },
                   ].map((item) => (
                     <div key={item.label} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                       <span className="text-gray-600 text-xs">{item.label}</span>
@@ -299,58 +361,67 @@ export function CustomersPage() {
               <div className="bg-white rounded-lg border border-gray-200 p-5">
                 <p className="text-gray-900 text-sm mb-3" style={{ fontWeight: 600 }}>Next Best Action</p>
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="px-2 py-1 bg-white border border-blue-300 rounded text-blue-700" style={{ fontWeight: 600 }}>
-                      Condition: VIP + High Spend
-                    </span>
-                    <span className="text-blue-400">→</span>
-                    <span className="px-2 py-1 bg-blue-600 text-white rounded" style={{ fontWeight: 600 }}>
-                      Action: Invite to Premium Tier
-                    </span>
-                  </div>
+                  {selected.risk === "HIGH" ? (
+                    <div className="flex flex-col gap-2 text-xs">
+                      <span className="px-2 py-1 bg-white border border-red-300 rounded text-red-700 w-fit" style={{ fontWeight: 600 }}>
+                        Condition: Churn Risk Critical
+                      </span>
+                      <span className="px-2 py-1 bg-red-600 text-white rounded w-fit" style={{ fontWeight: 600 }}>
+                        Action: Reach out with win-back offer
+                      </span>
+                    </div>
+                  ) : selected.risk === "MED" ? (
+                    <div className="flex flex-col gap-2 text-xs">
+                      <span className="px-2 py-1 bg-white border border-amber-300 rounded text-amber-700 w-fit" style={{ fontWeight: 600 }}>
+                        Condition: Engagement Dropping
+                      </span>
+                      <span className="px-2 py-1 bg-amber-500 text-white rounded w-fit" style={{ fontWeight: 600 }}>
+                        Action: Send re-engagement email
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2 text-xs">
+                      <span className="px-2 py-1 bg-white border border-blue-300 rounded text-blue-700 w-fit" style={{ fontWeight: 600 }}>
+                        Condition: Healthy + Active
+                      </span>
+                      <span className="px-2 py-1 bg-blue-600 text-white rounded w-fit" style={{ fontWeight: 600 }}>
+                        Action: Invite to Loyalty Program
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Recent Activity */}
               <div className="bg-white rounded-lg border border-gray-200 p-5">
                 <p className="text-gray-900 text-sm mb-4" style={{ fontWeight: 600 }}>Recent Activity</p>
-                <div className="relative space-y-4">
-                  {/* Vertical timeline line */}
-                  <div className="absolute left-4 top-2 bottom-2 w-px bg-gray-200" />
-
-                  {/* Event 1 */}
-                  <div className="relative flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-emerald-100 border-2 border-white flex items-center justify-center flex-shrink-0 relative z-10">
-                      <ShoppingBag size={14} className="text-emerald-600" />
-                    </div>
-                    <div className="flex-1 pt-1">
-                      <p className="text-gray-700 text-xs" style={{ fontWeight: 500 }}>Purchased in-store - $45</p>
-                      <p className="text-gray-400 text-xs mt-0.5">2 days ago</p>
-                    </div>
+                {loadingProfile ? (
+                  <div className="py-8 text-center text-gray-400 flex flex-col items-center">
+                    <Loader2 size={20} className="animate-spin mb-2" />
+                    <span className="text-xs">Loading activity...</span>
                   </div>
-
-                  {/* Event 2 */}
-                  <div className="relative flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center flex-shrink-0 relative z-10">
-                      <Mail size={14} className="text-blue-600" />
-                    </div>
-                    <div className="flex-1 pt-1">
-                      <p className="text-gray-700 text-xs" style={{ fontWeight: 500 }}>Opened newsletter</p>
-                      <p className="text-gray-400 text-xs mt-0.5">5 days ago</p>
-                    </div>
+                ) : customerTxns.length === 0 ? (
+                  <p className="text-xs text-gray-400">No recent activity found.</p>
+                ) : (
+                  <div className="relative space-y-4">
+                    <div className="absolute left-4 top-2 bottom-2 w-px bg-gray-200" />
+                    {customerTxns.slice(0, 5).map((txn, idx) => (
+                      <div key={txn._id || idx} className="relative flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-full bg-emerald-100 border-2 border-white flex items-center justify-center flex-shrink-0 relative z-10">
+                          <ShoppingBag size={14} className="text-emerald-600" />
+                        </div>
+                        <div className="flex-1 pt-1">
+                          <p className="text-gray-700 text-xs" style={{ fontWeight: 500 }}>
+                            {txn.status === "Refunded" ? "Refunded purchase" : "Purchased in-store"} - ${txn.total.toFixed(2)}
+                          </p>
+                          <p className="text-gray-400 text-xs mt-0.5">
+                            {new Date(txn.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-
-                  {/* Event 3 */}
-                  <div className="relative flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-amber-100 border-2 border-white flex items-center justify-center flex-shrink-0 relative z-10">
-                      <Star size={14} className="text-amber-600" />
-                    </div>
-                    <div className="flex-1 pt-1">
-                      <p className="text-gray-700 text-xs" style={{ fontWeight: 500 }}>Left 5-star review</p>
-                      <p className="text-gray-400 text-xs mt-0.5">1 week ago</p>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -365,19 +436,19 @@ export function CustomersPage() {
             <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-red-400 text-red-700 p-3 md:p-4">
               <p className="text-gray-500 text-xs">High risk</p>
               <p className="mt-1 text-lg md:text-2xl" style={{ fontWeight: 700 }}>
-                {customers.filter((c) => c.risk === "HIGH").length}
+                {filteredCustomers.filter((c) => c.risk === "HIGH").length}
               </p>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-amber-400 text-amber-700 p-3 md:p-4">
               <p className="text-gray-500 text-xs">Medium risk</p>
               <p className="mt-1 text-lg md:text-2xl" style={{ fontWeight: 700 }}>
-                {customers.filter((c) => c.risk === "MED").length}
+                {filteredCustomers.filter((c) => c.risk === "MED").length}
               </p>
             </div>
             <div className="col-span-2 md:col-span-1 bg-white rounded-lg border border-gray-200 border-l-4 border-l-pink-400 text-pink-700 p-3 md:p-4">
               <p className="text-gray-500 text-xs">Total at-risk revenue</p>
               <p className="mt-1 text-lg md:text-2xl" style={{ fontWeight: 700 }}>
-                ${customers.filter((c) => c.risk !== "LOW").reduce((s, c) => s + c.spend, 0).toLocaleString()}
+                ${filteredCustomers.filter((c) => c.risk !== "LOW").reduce((s, c) => s + c.spend, 0).toLocaleString()}
               </p>
             </div>
           </div>

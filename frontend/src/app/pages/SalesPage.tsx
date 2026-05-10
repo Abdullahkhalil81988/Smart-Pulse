@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { TrendingUp, FileText, Plus, ChevronRight, Zap, Loader2, Calendar, Search, ArrowLeft, Trash2 } from "lucide-react";
+import { TrendingUp, FileText, Plus, ChevronRight, Zap, Loader2, Calendar, Search, ArrowLeft, Trash2, X } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import api from "../lib/api";
 import { toast } from "sonner";
@@ -40,6 +40,7 @@ export function SalesPage() {
   const [performance, setPerformance] = useState<ProductPerformance | null>(null);
   const [invoices, setInvoices] = useState<Transaction[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedInvoice, setSelectedInvoice] = useState<Transaction | null>(null);
 
   // Invoice Form State
   const [invCustomer, setInvCustomer] = useState("");
@@ -514,7 +515,12 @@ export function SalesPage() {
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <button className="text-blue-600 font-bold hover:underline">View Detail</button>
+                          <button 
+                            onClick={() => setSelectedInvoice(inv)}
+                            className="text-blue-600 font-bold hover:underline"
+                          >
+                            View Detail
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -535,6 +541,76 @@ export function SalesPage() {
           <p className="text-gray-500 text-[10px] mt-0.5">Real-time revenue tracking and professional invoicing automated for your business efficiency.</p>
         </div>
       </div>
+
+      {/* Invoice Detail Modal */}
+      {selectedInvoice && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl relative animate-in zoom-in-95 duration-200">
+            <button onClick={() => setSelectedInvoice(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-900">
+              <X size={20} />
+            </button>
+            <h3 className="text-xl font-bold text-gray-900 mb-1">Invoice #{selectedInvoice.billNo}</h3>
+            <p className="text-sm text-gray-500 mb-6">Customer: {selectedInvoice.customerName}</p>
+            
+            <div className="bg-gray-50 rounded-xl p-4 mb-6 max-h-60 overflow-y-auto">
+              <div className="space-y-3">
+                {selectedInvoice.items.map((item: any, idx: number) => (
+                  <div key={idx} className="flex justify-between text-sm">
+                    <div>
+                      <p className="font-bold text-gray-900">{item.name}</p>
+                      <p className="text-xs text-gray-500">{item.qty} x ${item.price.toFixed(2)}</p>
+                    </div>
+                    <p className="font-bold text-gray-900">${(item.qty * item.price).toFixed(2)}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-gray-200 mt-4 pt-4 space-y-2">
+                <div className="flex justify-between text-sm text-gray-500">
+                  <p>Subtotal</p>
+                  <p>${selectedInvoice.subtotal.toFixed(2)}</p>
+                </div>
+                {selectedInvoice.discountAmt > 0 && (
+                  <div className="flex justify-between text-sm text-emerald-600">
+                    <p>Discount</p>
+                    <p>-${selectedInvoice.discountAmt.toFixed(2)}</p>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm text-gray-500">
+                  <p>Tax</p>
+                  <p>${selectedInvoice.tax.toFixed(2)}</p>
+                </div>
+                <div className="flex justify-between text-lg font-bold text-gray-900 mt-2">
+                  <p>Total</p>
+                  <p>${selectedInvoice.total.toFixed(2)}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <button onClick={() => setSelectedInvoice(null)} className="flex-1 h-11 rounded-xl border border-gray-200 text-gray-700 font-bold hover:bg-gray-50 transition-colors">
+                Close
+              </button>
+              {selectedInvoice.status !== 'Completed' && (
+                <button 
+                  onClick={async () => {
+                    try {
+                      await api.patch(`/api/pos/transactions/${selectedInvoice._id}`, { status: 'Completed' });
+                      toast.success("Invoice marked as paid!");
+                      setSelectedInvoice(null);
+                      fetchData(); // Reload stats
+                    } catch (err) {
+                      toast.error("Failed to update invoice");
+                    }
+                  }}
+                  className="flex-1 h-11 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition-colors"
+                >
+                  Mark as Paid
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

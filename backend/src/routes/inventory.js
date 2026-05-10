@@ -9,7 +9,7 @@ router.use(auth);
 // GET all inventory items for current user
 router.get('/', async (req, res) => {
   try {
-    const items = await Inventory.find({ userId: req.user.id }).sort({ createdAt: -1 });
+    const items = await Inventory.find({ userId: { $in: req.user.teamIds } }).sort({ createdAt: -1 });
     res.json(items);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -22,7 +22,7 @@ router.post('/', async (req, res) => {
     const { code, name, category, price, stock, lowThreshold, unit } = req.body;
     
     // Check if code already exists for this user
-    const existing = await Inventory.findOne({ userId: req.user.id, code });
+    const existing = await Inventory.findOne({ userId: { $in: req.user.teamIds }, code });
     if (existing) {
       return res.status(400).json({ error: 'Item with this code already exists' });
     }
@@ -49,7 +49,7 @@ router.put('/:id', async (req, res) => {
   try {
     const { name, category, price, stock, lowThreshold, unit } = req.body;
     const item = await Inventory.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.id },
+      { _id: req.params.id, userId: { $in: req.user.teamIds } },
       { name, category, price, stock, lowThreshold, unit },
       { new: true }
     );
@@ -67,7 +67,7 @@ router.put('/:id', async (req, res) => {
 // DELETE an item
 router.delete('/:id', async (req, res) => {
   try {
-    const item = await Inventory.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
+    const item = await Inventory.findOneAndDelete({ _id: req.params.id, userId: { $in: req.user.teamIds } });
     
     if (!item) {
       return res.status(404).json({ error: 'Item not found' });
@@ -93,7 +93,7 @@ router.post('/bulk-restock', async (req, res) => {
     for (const update of updates) {
       if (update.amount > 0) {
         const item = await Inventory.findOneAndUpdate(
-          { code: update.code, userId: req.user.id },
+          { code: update.code, userId: { $in: req.user.teamIds } },
           { $inc: { stock: update.amount } },
           { new: true }
         );

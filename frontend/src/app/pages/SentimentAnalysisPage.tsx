@@ -9,6 +9,7 @@ interface ReviewItem {
   predicted_stars: number;
   sentiment: string;
   confidence: number;
+  createdAt?: string;
 }
 
 interface ReviewBatch {
@@ -38,6 +39,11 @@ export function SentimentAnalysisPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Filters
+  const [timeFilter, setTimeFilter] = useState("All");
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [starFilter, setStarFilter] = useState("All");
+
   async function warmup() {
     try {
       setWarmingUp(true);
@@ -51,8 +57,10 @@ export function SentimentAnalysisPage() {
 
   async function fetchReviews() {
     try {
-      const res = await api.get<{ reviews: ReviewBatch[] }>("/api/reviews?limit=10");
-      const allReviews = res.reviews.flatMap((batch) => batch.predictions);
+      const res = await api.get<{ reviews: ReviewBatch[] }>("/api/reviews?limit=50");
+      const allReviews = res.reviews.flatMap((batch) => 
+        batch.predictions.map(p => ({ ...p, createdAt: batch.createdAt }))
+      );
       setReviews(allReviews);
     } catch (err) {
       console.error("Failed to fetch reviews:", err);
@@ -108,7 +116,9 @@ export function SentimentAnalysisPage() {
       });
 
       if (Array.isArray(response.predictions)) {
-        setReviews(response.predictions);
+        const now = new Date().toISOString();
+        const stamped = response.predictions.map(p => ({ ...p, createdAt: now }));
+        setReviews([...stamped, ...reviews]);
       } else {
         await fetchReviews();
       }
@@ -128,14 +138,28 @@ export function SentimentAnalysisPage() {
     }
   }
 
-  const hasData = reviews.length > 0;
+  const categories = ["All", ...Array.from(new Set(reviews.map(r => r.category).filter(Boolean)))];
 
-  // Calculate summary stats
-  const avgRating = hasData ? (reviews.reduce((sum, r) => sum + (r.predicted_stars || 0), 0) / reviews.length).toFixed(1) : "0.0";
-  const totalProcessed = reviews.length;
-  const positiveCount = reviews.filter((r) => r.sentiment?.toLowerCase() === "positive").length;
-  const neutralCount = reviews.filter((r) => r.sentiment?.toLowerCase() === "neutral").length;
-  const negativeCount = reviews.filter((r) => r.sentiment?.toLowerCase() === "negative").length;
+  const filteredReviews = reviews.filter(r => {
+    if (categoryFilter !== "All" && r.category !== categoryFilter) return false;
+    if (starFilter !== "All" && String(r.predicted_stars) !== starFilter) return false;
+    
+    if (timeFilter === "Today") {
+      if (!r.createdAt) return true;
+      const today = new Date().toDateString();
+      if (new Date(r.createdAt).toDateString() !== today) return false;
+    }
+    return true;
+  });
+
+  const hasData = filteredReviews.length > 0;
+
+  // Calculate summary stats on filtered data
+  const avgRating = hasData ? (filteredReviews.reduce((sum, r) => sum + (r.predicted_stars || 0), 0) / filteredReviews.length).toFixed(1) : "0.0";
+  const totalProcessed = filteredReviews.length;
+  const positiveCount = filteredReviews.filter((r) => r.sentiment?.toLowerCase() === "positive").length;
+  const neutralCount = filteredReviews.filter((r) => r.sentiment?.toLowerCase() === "neutral").length;
+  const negativeCount = filteredReviews.filter((r) => r.sentiment?.toLowerCase() === "negative").length;
   const positivePercent = totalProcessed ? Math.round((positiveCount / totalProcessed) * 100) : 0;
   const neutralPercent = totalProcessed ? Math.round((neutralCount / totalProcessed) * 100) : 0;
   const negativePercent = totalProcessed ? Math.round((negativeCount / totalProcessed) * 100) : 0;
@@ -279,6 +303,52 @@ export function SentimentAnalysisPage() {
         </div>
       )}
 
+      {/* Filters Area */}
+      {reviews.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div className="flex gap-4 w-full md:w-auto">
+            <div className="flex-1 md:w-40">
+              <label className="text-gray-500 text-[10px] font-bold uppercase tracking-wider block mb-1">Time</label>
+              <select
+                value={timeFilter}
+                onChange={(e) => setTimeFilter(e.target.value)}
+                className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:border-violet-400"
+              >
+                <option value="All">All Time</option>
+                <option value="Today">Today</option>
+              </select>
+            </div>
+            <div className="flex-1 md:w-40">
+              <label className="text-gray-500 text-[10px] font-bold uppercase tracking-wider block mb-1">Category</label>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:border-violet-400"
+              >
+                {categories.map((c: any) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1 md:w-40">
+              <label className="text-gray-500 text-[10px] font-bold uppercase tracking-wider block mb-1">Stars</label>
+              <select
+                value={starFilter}
+                onChange={(e) => setStarFilter(e.target.value)}
+                className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:border-violet-400"
+              >
+                <option value="All">All Stars</option>
+                <option value="5">5 Stars</option>
+                <option value="4">4 Stars</option>
+                <option value="3">3 Stars</option>
+                <option value="2">2 Stars</option>
+                <option value="1">1 Star</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Zone 3: Prediction Data */}
       {hasData && (
         <div className="bg-white rounded-lg border border-gray-200">
@@ -312,7 +382,7 @@ export function SentimentAnalysisPage() {
                 </tr>
               </thead>
               <tbody>
-                {reviews.map((review, index) => (
+                {filteredReviews.map((review, index) => (
                   <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3 text-gray-700 max-w-xs">{review.original_text || "N/A"}</td>
                     <td className="px-4 py-3 text-gray-600">{review.category || "N/A"}</td>
@@ -337,7 +407,7 @@ export function SentimentAnalysisPage() {
 
           {/* Mobile: Stacked Cards */}
           <div className="md:hidden">
-            {reviews.map((review, index) => (
+            {filteredReviews.map((review, index) => (
               <div key={index} className="px-4 py-4 border-b border-gray-100 last:border-0">
                 {/* Top Row: Category + Sentiment Badge */}
                 <div className="flex items-center justify-between mb-2">

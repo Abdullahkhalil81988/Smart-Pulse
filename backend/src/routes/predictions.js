@@ -7,7 +7,7 @@ const Alert = require('../models/Alert');
 router.get('/', auth, async (req, res) => {
   try {
     const { model_type, limit = 50, page = 1 } = req.query;
-    const filter = { userId: req.user.id };
+    const filter = { userId: { $in: req.user.teamIds } };
     if (model_type) filter.model_type = model_type;
 
     const predictions = await Prediction.find(filter)
@@ -25,7 +25,7 @@ router.get('/', auth, async (req, res) => {
 // GET /api/predictions/stats  — dashboard summary cards, scoped to user
 router.get('/stats', auth, async (req, res) => {
   try {
-    const userFilter = { userId: req.user.id };
+    const userFilter = { userId: { $in: req.user.teamIds } };
 
     const total      = await Prediction.countDocuments(userFilter);
     const anomalies  = await Prediction.countDocuments({ ...userFilter, anomaly_flag: true });
@@ -48,7 +48,7 @@ router.get('/stats', auth, async (req, res) => {
 // GET /api/predictions/:id — with ownership check
 router.get('/:id', auth, async (req, res) => {
   try {
-    const p = await Prediction.findOne({ _id: req.params.id, userId: req.user.id });
+    const p = await Prediction.findOne({ _id: req.params.id, userId: { $in: req.user.teamIds } });
     if (!p) return res.status(404).json({ error: 'Prediction not found' });
     res.json(p);
   } catch (err) {
@@ -64,7 +64,7 @@ router.post('/feedback/:id', auth, async (req, res) => {
       return res.status(400).json({ error: 'correct must be a boolean' });
 
     const p = await Prediction.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.id },
+      { _id: req.params.id, userId: { $in: req.user.teamIds } },
       { correct, feedback_at: new Date() },
       { new: true }
     );

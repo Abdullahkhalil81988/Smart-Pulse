@@ -1,6 +1,13 @@
-import { Navigate, Outlet } from "react-router";
+import { Navigate, Outlet, useLocation } from "react-router";
 import { useAuth } from "../lib/AuthContext";
 import { Loader2 } from "lucide-react";
+
+const roleAccess: Record<string, string[]> = {
+  Admin: ["/dashboard", "/pos", "/transactions", "/sales", "/customers", "/sentiment-analysis", "/inventory", "/analytics", "/settings"],
+  Manager: ["/dashboard", "/pos", "/transactions", "/sales", "/customers", "/sentiment-analysis", "/inventory", "/analytics"],
+  Analyst: ["/dashboard", "/sales", "/sentiment-analysis", "/analytics"],
+  Cashier: ["/pos", "/transactions"],
+};
 
 /**
  * Wraps internal routes that require authentication.
@@ -10,6 +17,7 @@ import { Loader2 } from "lucide-react";
  */
 export function ProtectedRoute() {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -21,6 +29,15 @@ export function ProtectedRoute() {
 
   if (!loading && !user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (user) {
+    const userRole = user.role || "Cashier";
+    const allowedRoutes = roleAccess[userRole] || roleAccess["Cashier"];
+    const hasAccess = allowedRoutes.some(route => location.pathname.startsWith(route));
+    if (!hasAccess && location.pathname !== "/") {
+       return <Navigate to={allowedRoutes[0]} replace />;
+    }
   }
 
   return <Outlet />;

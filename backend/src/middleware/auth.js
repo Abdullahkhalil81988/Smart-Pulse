@@ -34,12 +34,20 @@ async function auth(req, res, next) {
       });
     }
 
+    let teamIds = [user._id];
+    if (user.businessId) {
+      const peers = await User.find({ businessId: user.businessId }).select('_id');
+      teamIds = peers.map(p => p._id);
+    }
+
     // Attach user info for downstream route handlers
     req.user = {
       id: user._id,
       firebaseUid: decoded.uid,
       email: user.email,
       name: user.name,
+      businessId: user.businessId,
+      teamIds: teamIds,
     };
 
     next();

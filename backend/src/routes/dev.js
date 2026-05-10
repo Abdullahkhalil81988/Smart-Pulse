@@ -8,6 +8,7 @@ const Transaction = require('../models/Transaction');
 const Prediction = require('../models/Prediction');
 const Alert = require('../models/Alert');
 const Settings = require('../models/Settings');
+const CustomerDb = require('../models/Customer');
 
 function isDevEnabled() {
   const env = (process.env.APP_ENV || process.env.NODE_ENV || '').toLowerCase();
@@ -64,6 +65,7 @@ router.post('/seed', auth, async (req, res) => {
         Transaction.deleteMany({ userId: user._id }).session(session),
         Prediction.deleteMany({ userId: user._id }).session(session),
         Alert.deleteMany({ userId: user._id }).session(session),
+        CustomerDb.deleteMany({ userId: user._id }).session(session),
       ]);
     }
 
@@ -123,6 +125,18 @@ router.post('/seed', auth, async (req, res) => {
       'Priya Nair',
       'Sam Lee',
     ];
+    
+    // Seed Customers
+    const existingCusts = await CustomerDb.find({ userId: user._id, name: { $in: customerNames } }).session(session);
+    const existingCustNames = new Set(existingCusts.map(c => c.name));
+    const newCustDocs = customerNames.filter(n => !existingCustNames.has(n)).map(name => ({
+      userId: user._id,
+      name,
+    }));
+    if (newCustDocs.length) {
+      await CustomerDb.insertMany(newCustDocs, { session });
+    }
+
     const paymentMethods = ['Card', 'Tap', 'Cash', 'Invoice'];
     const txnCount = Math.min(500, Math.max(1, Number(transactions) || 60));
     const daysBackNum = Math.min(365, Math.max(1, Number(daysBack) || 30));
@@ -233,6 +247,7 @@ router.post('/seed', auth, async (req, res) => {
         transactions: txnDocs.length,
         predictions: predDocs.length,
         alerts: alertDocs.length,
+        customers: newCustDocs.length,
       },
     });
   } catch (err) {
