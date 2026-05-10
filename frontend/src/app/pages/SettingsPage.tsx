@@ -64,6 +64,8 @@ export function SettingsPage() {
   
   const [deletingMember, setDeletingMember] = useState<StaffMember | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [savingBusiness, setSavingBusiness] = useState(false);
+  const [bizForm, setBizForm] = useState({ name: "", industry: "" });
 
   useEffect(() => {
     async function fetchBusiness() {
@@ -72,7 +74,10 @@ export function SettingsPage() {
           api.get<BusinessProfile[]>("/api/businesses"),
           api.get<SettingsConfig>("/api/settings"),
         ]);
-        if (bizRes.length > 0) setBusiness(bizRes[0]);
+        if (bizRes.length > 0) {
+          setBusiness(bizRes[0]);
+          setBizForm({ name: bizRes[0].name || "", industry: bizRes[0].industry || "" });
+        }
         setConfig(cfgRes);
       } catch (err) {
         console.error("Failed to fetch business profile:", err);
@@ -149,17 +154,24 @@ export function SettingsPage() {
               <div className="bg-white rounded-lg border border-gray-200 p-5">
                 <p className="text-gray-900 text-sm mb-4" style={{ fontWeight: 600 }}>Business information</p>
                 <div className="space-y-4">
-                  {[
-                    { label: "Business name", value: business?.name || "N/A" },
-                    { label: "Industry", value: business?.industry || "N/A" },
-                  ].map((f) => (
-                    <div key={f.label} className="flex flex-col md:grid md:grid-cols-3 gap-2 md:gap-4 md:items-center">
-                      <label className="text-gray-600 text-xs" style={{ fontWeight: 500 }}>{f.label}</label>
-                      <div className="md:col-span-2 h-9 rounded-md border border-gray-200 bg-gray-50 px-3 flex items-center">
-                        <span className="text-gray-700 text-sm">{f.value}</span>
-                      </div>
-                    </div>
-                  ))}
+                  <div className="flex flex-col md:grid md:grid-cols-3 gap-2 md:gap-4 md:items-center">
+                    <label className="text-gray-600 text-xs" style={{ fontWeight: 500 }}>Business name</label>
+                    <input
+                      className="md:col-span-2 h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-900/20 focus:border-gray-900 transition-all"
+                      value={bizForm.name}
+                      onChange={(e) => setBizForm(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="Business name"
+                    />
+                  </div>
+                  <div className="flex flex-col md:grid md:grid-cols-3 gap-2 md:gap-4 md:items-center">
+                    <label className="text-gray-600 text-xs" style={{ fontWeight: 500 }}>Industry</label>
+                    <input
+                      className="md:col-span-2 h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-900/20 focus:border-gray-900 transition-all"
+                      value={bizForm.industry}
+                      onChange={(e) => setBizForm(prev => ({ ...prev, industry: e.target.value }))}
+                      placeholder="e.g. Retail, F&B, Healthcare"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -277,8 +289,35 @@ export function SettingsPage() {
               </div>
 
               <div className="flex flex-col-reverse md:flex-row md:justify-end gap-2">
-                <button className="w-full md:w-auto px-4 py-2 rounded-md border border-gray-300 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-                <button className="w-full md:w-auto px-4 py-2 rounded-md bg-gray-900 text-white text-sm hover:bg-gray-700" style={{ fontWeight: 500 }}>Save changes</button>
+                <button 
+                  onClick={() => setBizForm({ name: business?.name || "", industry: business?.industry || "" })}
+                  className="w-full md:w-auto px-4 py-2 rounded-md border border-gray-300 text-sm text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  disabled={savingBusiness}
+                  onClick={async () => {
+                    if (!business) return;
+                    try {
+                      setSavingBusiness(true);
+                      const updated = await api.patch<BusinessProfile>(`/api/businesses/${business._id}`, {
+                        name: bizForm.name,
+                        industry: bizForm.industry,
+                      });
+                      setBusiness(updated);
+                      toast.success("Business profile saved!");
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Failed to save");
+                    } finally {
+                      setSavingBusiness(false);
+                    }
+                  }}
+                  className="w-full md:w-auto px-4 py-2 rounded-md bg-gray-900 text-white text-sm hover:bg-gray-700 disabled:opacity-60" 
+                  style={{ fontWeight: 500 }}
+                >
+                  {savingBusiness ? "Saving…" : "Save changes"}
+                </button>
               </div>
             </div>
           )}
